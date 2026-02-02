@@ -81,11 +81,7 @@ class ComicFileHandler {
         
         do {
             print("Creating archive object...")
-            guard let archive = Archive(url: fileURL, accessMode: .read) else {
-                print("ERROR: Failed to create archive")
-                return nil
-            }
-            
+            let archive = try Archive(url: fileURL, accessMode: .read)
             print("Archive created successfully")
             
             // Get all image files and sort them
@@ -149,17 +145,36 @@ struct ContentView: View {
                 ForEach(comics) { comic in
                     ComicRowView(comic: comic)
                         .tag(comic)
+                        .onTapGesture(count: 2) {
+                            openComicFile(comic)
+                        }
                         .contextMenu {
-                            Button(role: .destructive) {
-                                modelContext.delete(comic)
+                            Button {
+                                selectedComic = comic
                             } label: {
-                                Label("Delete", systemImage: "trash")
+                                Label("Show Details", systemImage: "info.circle")
                             }
+                            
+                            Button {
+                                openComicFile(comic)
+                            } label: {
+                                Label("Open File", systemImage: "book.open")
+                            }
+                            
+                            Divider()
                             
                             Button {
                                 extractCoverForComic(comic)
                             } label: {
                                 Label("Extract Cover", systemImage: "photo")
+                            }
+                            
+                            Divider()
+                            
+                            Button(role: .destructive) {
+                                modelContext.delete(comic)
+                            } label: {
+                                Label("Delete from Library", systemImage: "trash")
                             }
                         }
                 }
@@ -241,6 +256,20 @@ struct ContentView: View {
         if let coverData = ComicFileHandler.extractCover(from: fileURL) {
             comic.coverImageData = coverData
         }
+    }
+    
+    private func openComicFile(_ comic: Comic) {
+        let fileURL = URL(fileURLWithPath: comic.filePath)
+        
+        // Check if file exists
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            print("Error: File not found at \(fileURL.path)")
+            // Could show an alert here
+            return
+        }
+        
+        // Open the file with the default application
+        NSWorkspace.shared.open(fileURL)
     }
     
     private func deleteComics(at offsets: IndexSet) {
