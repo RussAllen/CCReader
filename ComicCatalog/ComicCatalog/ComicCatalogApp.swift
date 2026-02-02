@@ -1,4 +1,3 @@
-
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
@@ -199,6 +198,7 @@ struct ContentView: View {
     @State private var selectedFolder: FolderNode?
     @State private var comicsInFolder: [URL] = []
     @State private var showingAddFolder = false
+    @State private var showingManageFolders = false
     @State private var showingComicDetail: Comic?
     @State private var folderTree: [FolderNode] = []
     
@@ -211,10 +211,17 @@ struct ContentView: View {
                         .font(.headline)
                     Spacer()
                     Button {
+                        showingManageFolders = true
+                    } label: {
+                        Image(systemName: "gear")
+                    }
+                    .help("Manage Library Folders")
+                    Button {
                         showingAddFolder = true
                     } label: {
                         Image(systemName: "plus")
                     }
+                    .help("Add Library Folder")
                 }
                 .padding()
                 
@@ -231,12 +238,33 @@ struct ContentView: View {
                             showingAddFolder = true
                         }
                         .buttonStyle(.borderedProminent)
+                        
+                        if !libraryFolders.isEmpty {
+                            Divider()
+                                .padding()
+                            
+                            Text("Found \(libraryFolders.count) folder(s) in database but can't access them")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                                .multilineTextAlignment(.center)
+                            
+                            Button("Clear All Library Folders") {
+                                clearAllLibraryFolders()
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List(selection: $selectedFolder) {
                         ForEach(folderTree) { node in
-                            FolderTreeRow(node: node, selectedFolder: $selectedFolder)
+                            FolderTreeRow(
+                                node: node,
+                                selectedFolder: $selectedFolder,
+                                onDelete: {
+                                    deleteLibraryFolder(node)
+                                }
+                            )
                         }
                     }
                     .listStyle(.sidebar)
@@ -255,6 +283,15 @@ struct ContentView: View {
             }
             .onAppear {
                 buildFolderTree()
+            }
+            .sheet(isPresented: $showingManageFolders) {
+                ManageFoldersSheet(
+                    libraryFolders: libraryFolders,
+                    onDelete: { folder in
+                        modelContext.delete(folder)
+                        buildFolderTree()
+                    }
+                )
             }
         } detail: {
             // Right: Comics in selected folder
@@ -489,6 +526,34 @@ struct ContentView: View {
             importComic(fileURL)
         }
     }
+    
+    private func deleteLibraryFolder(_ node: FolderNode) {
+        print("Deleting library folder: \(node.url.path)")
+        
+        // Find and delete the LibraryFolder from database
+        if let folderToDelete = libraryFolders.first(where: { $0.path == node.url.path }) {
+            modelContext.delete(folderToDelete)
+            print("Deleted folder from database")
+        }
+        
+        // Rebuild tree
+        buildFolderTree()
+        
+        // Clear selection if we deleted the selected folder
+        if selectedFolder?.url.path == node.url.path {
+            selectedFolder = nil
+        }
+    }
+    
+    private func clearAllLibraryFolders() {
+        print("Clearing all library folders from database...")
+        for folder in libraryFolders {
+            modelContext.delete(folder)
+        }
+        buildFolderTree()
+        selectedFolder = nil
+        print("All library folders cleared")
+    }
 }
 
 // MARK: - Folder Tree Row
@@ -496,13 +561,14 @@ struct FolderTreeRow: View {
     let node: FolderNode
     @Binding var selectedFolder: FolderNode?
     @State private var isExpanded: Bool = false
+    let onDelete: (() -> Void)?
     
     var body: some View {
         DisclosureGroup(
             isExpanded: $isExpanded,
             content: {
                 ForEach(node.children) { child in
-                    FolderTreeRow(node: child, selectedFolder: $selectedFolder)
+                    FolderTreeRow(node: child, selectedFolder: $selectedFolder, onDelete: nil)
                 }
             },
             label: {
@@ -517,6 +583,15 @@ struct FolderTreeRow: View {
                 }
             }
         )
+        .contextMenu {
+            if let onDelete = onDelete {
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Label("Remove from Library", systemImage: "trash")
+                }
+            }
+        }
     }
 }
 
@@ -718,8 +793,61 @@ struct ComicDetailSheet: View {
     }
 }
 
+// MARK: - Manage Folders Sheet
+struct ManageFoldersSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let libraryFolders: [LibraryFolder]
+    let onDelete: (LibraryFolder) -> Void
+    
+    var body: some View {
+        NavigationStack {
+            List {
+                if libraryFolders.isEmpty {
+                    ContentUnavailableView(
+                        "No Library Folders",
+                        systemImage: "folder.badge.questionmark",
+                        description: Text("Add folders using the + button")
+                    )
+                } else {
+                    ForEach(libraryFolders, id: \.path) { folder in
+                        HStack {
+                            Image(systemName: "folder.fill")
+                                .foregroundColor(.blue)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(folder.name)
+                                    .font(.headline)
+                                Text(folder.path)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Button(role: .destructive) {
+                                onDelete(folder)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+            .navigationTitle("Manage Library Folders")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .frame(minWidth: 500, minHeight: 400)
+    }
+}
+
 // MARK: - Preview
 #Preview {
     ContentView()
         .modelContainer(for: [Comic.self, LibraryFolder.self], inMemory: true)
 }
+
