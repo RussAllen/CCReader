@@ -27,6 +27,7 @@ struct CCReaderApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .tint(.orange) // Change this to any color you want: .blue, .green, .purple, etc.
         }
         .modelContainer(sharedModelContainer)
     }

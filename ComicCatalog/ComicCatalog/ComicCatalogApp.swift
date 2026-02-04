@@ -766,8 +766,7 @@ struct ContentView: View {
                                     importComic(fileURL)
                                 },
                                 onDelete: { comic in
-                                    modelContext.delete(comic)
-                                    loadComicsInFolder(selectedFolder)
+                                    deleteComic(comic)
                                 }
                             )
                         }
@@ -916,8 +915,76 @@ struct ContentView: View {
             buildFolderTree()
             print("Folder tree rebuilt. New tree count: \(folderTree.count)")
             
+            // Automatically import all comics in the newly added folder and subfolders
+            print("Auto-importing comics from newly added folder...")
+            autoImportComicsFromFolder(url)
+            
         case .failure(let error):
             print("ERROR selecting folder: \(error)")
+        }
+    }
+    
+    private func autoImportComicsFromFolder(_ folderURL: URL) {
+        print("=== autoImportComicsFromFolder called for: \(folderURL.path) ===")
+        
+        let fileManager = FileManager.default
+        
+        // Use a recursive enumerator to get all comics in this folder and subfolders
+        guard let enumerator = fileManager.enumerator(
+            at: folderURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            print("ERROR: Could not create enumerator for folder")
+            return
+        }
+        
+        var comicsToImport: [URL] = []
+        
+        for case let fileURL as URL in enumerator {
+            let ext = fileURL.pathExtension.lowercased()
+            if ext == "cbr" || ext == "cbz" {
+                comicsToImport.append(fileURL)
+            }
+        }
+        
+        print("Found \(comicsToImport.count) comics to auto-import")
+        
+        // Import each comic
+        for (index, comicURL) in comicsToImport.enumerated() {
+            print("Auto-importing [\(index + 1)/\(comicsToImport.count)]: \(comicURL.lastPathComponent)")
+            
+            // Check if already imported
+            if comics.contains(where: { $0.filePath == comicURL.path }) {
+                print("  Already imported, skipping")
+                continue
+            }
+            
+            let filename = comicURL.deletingPathExtension().lastPathComponent
+            let newComic = Comic(
+                title: filename,
+                series: "",
+                issueNumber: "",
+                filePath: comicURL.path
+            )
+            
+            // Extract cover (this might take time for CBR files)
+            if let coverData = ComicFileHandler.extractCover(from: comicURL) {
+                print("  Cover extracted successfully")
+                newComic.coverImageData = coverData
+            } else {
+                print("  Cover extraction failed")
+            }
+            
+            modelContext.insert(newComic)
+        }
+        
+        // Save all imported comics
+        do {
+            try modelContext.save()
+            print("Auto-import completed successfully")
+        } catch {
+            print("ERROR saving auto-imported comics: \(error)")
         }
     }
     
@@ -984,8 +1051,38 @@ struct ContentView: View {
         print("Import all completed")
     }
     
+    private func deleteComic(_ comic: Comic) {
+        print("Deleting comic: \(comic.title)")
+        modelContext.delete(comic)
+        
+        // Save the deletion
+        do {
+            try modelContext.save()
+            print("Comic deleted successfully")
+        } catch {
+            print("ERROR saving after comic deletion: \(error)")
+        }
+        
+        // Reload the current folder to update the list
+        loadComicsInFolder(selectedFolder)
+    }
+    
     private func deleteLibraryFolder(_ node: FolderNode) {
         print("Deleting library folder: \(node.url.path)")
+        
+        // First, find and delete all comics associated with this folder
+        let folderPath = node.url.path
+        let comicsToDelete = comics.filter { comic in
+            // Check if the comic's file path starts with the folder path
+            comic.filePath.hasPrefix(folderPath)
+        }
+        
+        print("Found \(comicsToDelete.count) comics to delete from this folder")
+        
+        for comic in comicsToDelete {
+            print("  Deleting comic: \(comic.title) at \(comic.filePath)")
+            modelContext.delete(comic)
+        }
         
         // Remove from access URLs
         folderAccessURLs.removeAll(where: { $0.path == node.url.path })
@@ -994,23 +1091,22 @@ struct ContentView: View {
         if let folderToDelete = libraryFolders.first(where: { $0.path == node.url.path }) {
             modelContext.delete(folderToDelete)
             print("Deleted folder from database")
-            
-            // Force save
-            do {
-                try modelContext.save()
-                print("ModelContext saved after delete")
-            } catch {
-                print("ERROR saving after delete: \(error)")
-            }
         }
+        
+        // Force save
+        do {
+            try modelContext.save()
+            print("ModelContext saved after delete (deleted folder and \(comicsToDelete.count) comics)")
+        } catch {
+            print("ERROR saving after delete: \(error)")
+        }
+        
+        // Clear selection and comics list
+        selectedFolder = nil
+        comicsInFolder = []
         
         // Rebuild tree
         buildFolderTree()
-        
-        // Clear selection if we deleted the selected folder
-        if selectedFolder?.url.path == node.url.path {
-            selectedFolder = nil
-        }
     }
     
     private func clearAllLibraryFolders() {
@@ -1028,8 +1124,11 @@ struct ContentView: View {
             print("ERROR saving after clear: \(error)")
         }
         
-        buildFolderTree()
+        // Clear selection and comics list
         selectedFolder = nil
+        comicsInFolder = []
+        
+        buildFolderTree()
         print("All library folders cleared")
     }
 }

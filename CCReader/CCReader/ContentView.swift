@@ -126,7 +126,7 @@ struct ContentView: View {
                 VStack(spacing: 20) {
                     Image(systemName: "book.pages")
                         .font(.system(size: 80))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.orange) // Custom color for this icon
                     Text("Select a comic or open a new one")
                         .font(.title2)
                         .foregroundStyle(.secondary)
