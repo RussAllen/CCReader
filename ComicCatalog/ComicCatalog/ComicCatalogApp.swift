@@ -54,6 +54,44 @@ class LibraryFolder {
     }
 }
 
+// MARK: - Comic Row View (for Library list)
+struct ComicRowView: View {
+    let comic: Comic
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Thumbnail
+            if let imageData = comic.coverImageData,
+               let nsImage = NSImage(data: imageData) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 40, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+            } else {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: 40, height: 60)
+                    .overlay {
+                        Image(systemName: "book.closed")
+                            .foregroundColor(.gray)
+                    }
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(comic.title)
+                    .font(.headline)
+                if !comic.series.isEmpty {
+                    Text(comic.series + (comic.issueNumber.isEmpty ? "" : " #\(comic.issueNumber)"))
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
 // MARK: - Folder Tree Node
 class FolderNode: Identifiable, Hashable {
     let id = UUID()
@@ -87,12 +125,146 @@ class ComicFileHandler {
             print("This is a CBZ file, attempting extraction...")
             return extractCoverFromCBZ(fileURL)
         } else if ext == "cbr" {
-            print("This is a CBR file - not yet supported")
-            return nil
+            print("This is a CBR file, attempting extraction...")
+            return extractCoverFromCBR(fileURL)
         }
         
         print("Unknown file type: \(ext)")
         return nil
+    }
+    
+    private static func extractCoverFromCBR(_ fileURL: URL) -> Data? {
+        print("Starting CBR extraction using command-line unar...")
+        
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            print("ERROR: File does not exist at path: \(fileURL.path)")
+            return nil
+        }
+        
+        // Check if unar is installed
+        let checkUnar = Process()
+        checkUnar.launchPath = "/usr/bin/which"
+        checkUnar.arguments = ["unar"]
+        
+        let checkPipe = Pipe()
+        checkUnar.standardOutput = checkPipe
+        checkUnar.standardError = checkPipe
+        
+        do {
+            try checkUnar.run()
+            checkUnar.waitUntilExit()
+            
+            if checkUnar.terminationStatus != 0 {
+                print("ERROR: unar command not found. Install with: brew install unar")
+                return nil
+            }
+        } catch {
+            print("ERROR checking for unar: \(error)")
+            return nil
+        }
+        
+        // Create temp directory
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: tempDir)
+        }
+        
+        // List contents of RAR file
+        let listProcess = Process()
+        listProcess.launchPath = "/usr/local/bin/unar"
+        listProcess.arguments = ["-l", fileURL.path]
+        
+        let listPipe = Pipe()
+        listProcess.standardOutput = listPipe
+        
+        do {
+            try listProcess.run()
+            listProcess.waitUntilExit()
+            
+            let listData = listPipe.fileHandleForReading.readDataToEndOfFile()
+            guard let listOutput = String(data: listData, encoding: .utf8) else {
+                print("ERROR: Could not read unar output")
+                return nil
+            }
+            
+            // Parse unar output to find first image file
+            let imageExtensions = ["jpg", "jpeg", "png", "gif", "webp"]
+            var firstImage: String?
+            
+            for line in listOutput.components(separatedBy: .newlines) {
+                // unar -l output format has filenames after some metadata
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed.isEmpty { continue }
+                
+                for ext in imageExtensions {
+                    if trimmed.lowercased().hasSuffix(".\(ext)") {
+                        firstImage = trimmed
+                        break
+                    }
+                }
+                if firstImage != nil { break }
+            }
+            
+            guard let imageFile = firstImage else {
+                print("ERROR: No image files found in archive")
+                return nil
+            }
+            
+            print("Found first image: \(imageFile)")
+            
+            // Extract the entire archive to temp directory (unar doesn't support single file extraction easily)
+            let extractProcess = Process()
+            extractProcess.launchPath = "/usr/local/bin/unar"
+            extractProcess.arguments = ["-o", tempDir.path, "-f", fileURL.path]
+            
+            try extractProcess.run()
+            extractProcess.waitUntilExit()
+            
+            if extractProcess.terminationStatus != 0 {
+                print("ERROR: Failed to extract archive")
+                return nil
+            }
+            
+            // Find the extracted image file
+            let fileManager = FileManager.default
+            guard let extractedContents = try? fileManager.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil) else {
+                print("ERROR: Could not list extracted files")
+                return nil
+            }
+            
+            // Find first image file in extracted contents
+            for item in extractedContents {
+                let ext = item.pathExtension.lowercased()
+                if imageExtensions.contains(ext) {
+                    let imageData = try Data(contentsOf: item)
+                    print("SUCCESS: Extracted \(imageData.count) bytes from \(item.lastPathComponent)")
+                    return imageData
+                }
+                
+                // Check if it's a subdirectory and recurse
+                var isDirectory: ObjCBool = false
+                if fileManager.fileExists(atPath: item.path, isDirectory: &isDirectory), isDirectory.boolValue {
+                    if let subContents = try? fileManager.contentsOfDirectory(at: item, includingPropertiesForKeys: nil) {
+                        for subItem in subContents.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+                            let ext = subItem.pathExtension.lowercased()
+                            if imageExtensions.contains(ext) {
+                                let imageData = try Data(contentsOf: subItem)
+                                print("SUCCESS: Extracted \(imageData.count) bytes from \(subItem.lastPathComponent)")
+                                return imageData
+                            }
+                        }
+                    }
+                }
+            }
+            
+            print("ERROR: Could not find extracted image file")
+            return nil
+            
+        } catch {
+            print("ERROR extracting from CBR: \(error)")
+            return nil
+        }
     }
     
     private static func extractCoverFromCBZ(_ fileURL: URL) -> Data? {
@@ -103,15 +275,7 @@ class ComicFileHandler {
             return nil
         }
         
-        print("File exists, requesting security access...")
-        guard fileURL.startAccessingSecurityScopedResource() else {
-            print("ERROR: Failed to access security scoped resource")
-            return nil
-        }
-        defer {
-            print("Stopping security scoped access")
-            fileURL.stopAccessingSecurityScopedResource()
-        }
+        print("File exists")
         
         do {
             print("Creating archive object...")
@@ -151,11 +315,6 @@ class ComicFileHandler {
     }
     
     static func findComicsInFolder(_ folderURL: URL) -> [URL] {
-        guard folderURL.startAccessingSecurityScopedResource() else {
-            return []
-        }
-        defer { folderURL.stopAccessingSecurityScopedResource() }
-        
         var results: [URL] = []
         let fileManager = FileManager.default
         
@@ -199,8 +358,10 @@ struct ContentView: View {
     @State private var comicsInFolder: [URL] = []
     @State private var showingAddFolder = false
     @State private var showingManageFolders = false
+    @State private var showingLibrary = false
     @State private var showingComicDetail: Comic?
     @State private var folderTree: [FolderNode] = []
+    @State private var folderAccessURLs: [URL] = [] // Store URLs we have access to
     
     var body: some View {
         NavigationSplitView {
@@ -222,6 +383,12 @@ struct ContentView: View {
                         Image(systemName: "plus")
                     }
                     .help("Add Library Folder")
+                    Button {
+                        showingLibrary = true
+                    } label: {
+                        Image(systemName: "books.vertical")
+                    }
+                    .help("View Library (\(comics.count) comics)")
                 }
                 .padding()
                 
@@ -353,9 +520,15 @@ struct ContentView: View {
                 }
             }
             .navigationTitle("Comics")
-            .sheet(item: $showingComicDetail) { comic in
-                ComicDetailSheet(comic: comic)
-            }
+        }
+        .sheet(item: $showingComicDetail) { comic in
+            ComicDetailSheet(comic: comic)
+        }
+        .sheet(isPresented: $showingLibrary) {
+            LibraryViewSheet(comics: comics, modelContext: modelContext, onShowDetails: { comic in
+                showingLibrary = false
+                showingComicDetail = comic
+            })
         }
     }
     
@@ -364,42 +537,18 @@ struct ContentView: View {
         folderTree = []
         
         print("Library folders count: \(libraryFolders.count)")
+        print("Folder access URLs count: \(folderAccessURLs.count)")
         
         for libraryFolder in libraryFolders {
             print("Processing library folder: \(libraryFolder.name) at \(libraryFolder.path)")
             
-            // Resolve URL from bookmark
-            guard let bookmarkData = libraryFolder.bookmarkData else {
-                print("ERROR: No bookmark data for folder")
+            // Try to find matching URL in our access list
+            guard let folderURL = folderAccessURLs.first(where: { $0.path == libraryFolder.path }) else {
+                print("No access URL found for this folder")
                 continue
             }
             
-            var isStale = false
-            guard let folderURL = try? URL(
-                resolvingBookmarkData: bookmarkData,
-                options: .withSecurityScope,
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            ) else {
-                print("ERROR: Failed to resolve bookmark")
-                continue
-            }
-            
-            if isStale {
-                print("WARNING: Bookmark is stale")
-            }
-            
-            print("Requesting security access for: \(folderURL.path)")
-            guard folderURL.startAccessingSecurityScopedResource() else {
-                print("ERROR: Failed to get security access for \(folderURL.path)")
-                continue
-            }
-            defer {
-                print("Stopping security access for: \(folderURL.path)")
-                folderURL.stopAccessingSecurityScopedResource()
-            }
-            
-            print("Creating root node...")
+            print("Found access URL, creating root node...")
             let rootNode = FolderNode(url: folderURL)
             print("Loading subfolders...")
             loadSubfolders(for: rootNode)
@@ -411,28 +560,48 @@ struct ContentView: View {
     }
     
     private func loadSubfolders(for node: FolderNode) {
+        print("Loading subfolders for: \(node.name)")
         let fileManager = FileManager.default
         
-        guard let enumerator = fileManager.enumerator(
-            at: node.url,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
-        ) else {
-            return
-        }
+        print("Reading contents of: \(node.url.path)")
         
-        for case let fileURL as URL in enumerator {
-            guard let resourceValues = try? fileURL.resourceValues(forKeys: [.isDirectoryKey]),
-                  let isDirectory = resourceValues.isDirectory,
-                  isDirectory else {
-                continue
+        do {
+            let contents = try fileManager.contentsOfDirectory(
+                at: node.url,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+            
+            print("Found \(contents.count) items")
+            
+            var foundFolders = 0
+            for fileURL in contents {
+                print("  Checking item: \(fileURL.lastPathComponent)")
+                
+                guard let resourceValues = try? fileURL.resourceValues(forKeys: [.isDirectoryKey]),
+                      let isDirectory = resourceValues.isDirectory else {
+                    print("    Could not get resource values")
+                    continue
+                }
+                
+                print("    Is directory: \(isDirectory)")
+                
+                if isDirectory {
+                    foundFolders += 1
+                    print("  Found subfolder: \(fileURL.lastPathComponent)")
+                    let childNode = FolderNode(url: fileURL)
+                    // Recursively load subfolders for this child
+                    loadSubfolders(for: childNode)
+                    node.children.append(childNode)
+                }
             }
             
-            let childNode = FolderNode(url: fileURL)
-            node.children.append(childNode)
+            print("Total subfolders found in \(node.name): \(foundFolders)")
+            node.children.sort { $0.name < $1.name }
+            
+        } catch {
+            print("ERROR reading directory contents: \(error)")
         }
-        
-        node.children.sort { $0.name < $1.name }
     }
     
     private func handleAddFolder(_ result: Result<URL, Error>) {
@@ -440,6 +609,14 @@ struct ContentView: View {
         switch result {
         case .success(let url):
             print("Selected folder: \(url.path)")
+            
+            // Start accessing the security-scoped resource
+            print("Starting security scoped access...")
+            guard url.startAccessingSecurityScopedResource() else {
+                print("ERROR: Could not start accessing security scoped resource")
+                return
+            }
+            // Don't call stopAccessing - we need to keep access for the app lifetime
             
             // Check if already added
             print("Checking if folder already exists...")
@@ -449,22 +626,14 @@ struct ContentView: View {
                 return
             }
             
-            // Create security-scoped bookmark
-            print("Creating security bookmark...")
-            guard let bookmarkData = try? url.bookmarkData(
-                options: .withSecurityScope,
-                includingResourceValuesForKeys: nil,
-                relativeTo: nil
-            ) else {
-                print("ERROR: Failed to create bookmark data")
-                return
-            }
+            // Store the URL for access
+            folderAccessURLs.append(url)
             
             print("Creating new LibraryFolder object...")
             let folder = LibraryFolder(
                 path: url.path,
                 name: url.lastPathComponent,
-                bookmarkData: bookmarkData
+                bookmarkData: nil
             )
             print("Inserting into modelContext...")
             modelContext.insert(folder)
@@ -487,12 +656,19 @@ struct ContentView: View {
     }
     
     private func loadComicsInFolder(_ folder: FolderNode?) {
+        print("=== loadComicsInFolder called ===")
         guard let folder = folder else {
+            print("No folder selected")
             comicsInFolder = []
             return
         }
         
+        print("Loading comics from: \(folder.name) at \(folder.url.path)")
         comicsInFolder = ComicFileHandler.findComicsInFolder(folder.url)
+        print("Found \(comicsInFolder.count) comics in folder")
+        for comic in comicsInFolder {
+            print("  - \(comic.lastPathComponent)")
+        }
     }
     
     private func findComicByPath(_ path: String) -> Comic? {
@@ -500,12 +676,16 @@ struct ContentView: View {
     }
     
     private func importComic(_ fileURL: URL) {
+        print("=== importComic called for: \(fileURL.lastPathComponent) ===")
+        
         // Check if already imported
         if comics.contains(where: { $0.filePath == fileURL.path }) {
+            print("Already imported, skipping")
             return
         }
         
         let filename = fileURL.deletingPathExtension().lastPathComponent
+        print("Creating Comic object with title: \(filename)")
         let newComic = Comic(
             title: filename,
             series: "",
@@ -513,27 +693,49 @@ struct ContentView: View {
             filePath: fileURL.path
         )
         
+        print("Attempting to extract cover...")
         if let coverData = ComicFileHandler.extractCover(from: fileURL) {
+            print("Cover extracted successfully, size: \(coverData.count) bytes")
             newComic.coverImageData = coverData
+        } else {
+            print("Cover extraction failed or returned nil")
         }
         
+        print("Inserting comic into context")
         modelContext.insert(newComic)
+        print("Comic inserted")
+        
         loadComicsInFolder(selectedFolder)
     }
     
     private func importAllComicsInFolder() {
+        print("=== importAllComicsInFolder called ===")
+        print("Comics in folder count: \(comicsInFolder.count)")
         for fileURL in comicsInFolder {
+            print("Importing: \(fileURL.lastPathComponent)")
             importComic(fileURL)
         }
+        print("Import all completed")
     }
     
     private func deleteLibraryFolder(_ node: FolderNode) {
         print("Deleting library folder: \(node.url.path)")
         
+        // Remove from access URLs
+        folderAccessURLs.removeAll(where: { $0.path == node.url.path })
+        
         // Find and delete the LibraryFolder from database
         if let folderToDelete = libraryFolders.first(where: { $0.path == node.url.path }) {
             modelContext.delete(folderToDelete)
             print("Deleted folder from database")
+            
+            // Force save
+            do {
+                try modelContext.save()
+                print("ModelContext saved after delete")
+            } catch {
+                print("ERROR saving after delete: \(error)")
+            }
         }
         
         // Rebuild tree
@@ -547,9 +749,19 @@ struct ContentView: View {
     
     private func clearAllLibraryFolders() {
         print("Clearing all library folders from database...")
+        folderAccessURLs.removeAll()
         for folder in libraryFolders {
             modelContext.delete(folder)
         }
+        
+        // Force save
+        do {
+            try modelContext.save()
+            print("ModelContext saved after clearing all")
+        } catch {
+            print("ERROR saving after clear: \(error)")
+        }
+        
         buildFolderTree()
         selectedFolder = nil
         print("All library folders cleared")
@@ -564,31 +776,54 @@ struct FolderTreeRow: View {
     let onDelete: (() -> Void)?
     
     var body: some View {
-        DisclosureGroup(
-            isExpanded: $isExpanded,
-            content: {
-                ForEach(node.children) { child in
-                    FolderTreeRow(node: child, selectedFolder: $selectedFolder, onDelete: nil)
-                }
-            },
-            label: {
-                HStack {
-                    Image(systemName: "folder.fill")
-                        .foregroundColor(.blue)
-                    Text(node.name)
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    selectedFolder = node
+        if node.children.isEmpty {
+            // No children - just show the folder
+            HStack {
+                Image(systemName: "folder.fill")
+                    .foregroundColor(.blue)
+                Text(node.name)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                selectedFolder = node
+            }
+            .contextMenu {
+                if let onDelete = onDelete {
+                    Button(role: .destructive) {
+                        onDelete()
+                    } label: {
+                        Label("Remove from Library", systemImage: "trash")
+                    }
                 }
             }
-        )
-        .contextMenu {
-            if let onDelete = onDelete {
-                Button(role: .destructive) {
-                    onDelete()
-                } label: {
-                    Label("Remove from Library", systemImage: "trash")
+        } else {
+            // Has children - show disclosure group
+            DisclosureGroup(
+                isExpanded: $isExpanded,
+                content: {
+                    ForEach(node.children) { child in
+                        FolderTreeRow(node: child, selectedFolder: $selectedFolder, onDelete: nil)
+                    }
+                },
+                label: {
+                    HStack {
+                        Image(systemName: "folder.fill")
+                            .foregroundColor(.blue)
+                        Text(node.name)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectedFolder = node
+                    }
+                }
+            )
+            .contextMenu {
+                if let onDelete = onDelete {
+                    Button(role: .destructive) {
+                        onDelete()
+                    } label: {
+                        Label("Remove from Library", systemImage: "trash")
+                    }
                 }
             }
         }
@@ -790,6 +1025,66 @@ struct ComicDetailSheet: View {
             }
         }
         .frame(minWidth: 600, minHeight: 700)
+    }
+}
+
+// MARK: - Library View Sheet
+struct LibraryViewSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let comics: [Comic]
+    let modelContext: ModelContext
+    let onShowDetails: (Comic) -> Void
+    
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(comics) { comic in
+                    ComicRowView(comic: comic)
+                        .onTapGesture {
+                            onShowDetails(comic)
+                        }
+                        .contextMenu {
+                            Button {
+                                onShowDetails(comic)
+                            } label: {
+                                Label("Show Details", systemImage: "info.circle")
+                            }
+                            
+                            Button {
+                                NSWorkspace.shared.open(URL(fileURLWithPath: comic.filePath))
+                            } label: {
+                                Label("Open File", systemImage: "book.open")
+                            }
+                            
+                            Divider()
+                            
+                            Button(role: .destructive) {
+                                modelContext.delete(comic)
+                            } label: {
+                                Label("Delete from Library", systemImage: "trash")
+                            }
+                        }
+                }
+            }
+            .navigationTitle("Library (\(comics.count) comics)")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .destructiveAction) {
+                    Button("Clear All") {
+                        for comic in comics {
+                            modelContext.delete(comic)
+                        }
+                        dismiss()
+                    }
+                    .disabled(comics.isEmpty)
+                }
+            }
+        }
+        .frame(minWidth: 600, minHeight: 500)
     }
 }
 

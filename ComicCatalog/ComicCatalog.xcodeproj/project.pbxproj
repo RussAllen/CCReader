@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		BAB815882F30EC1F00626C1C /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = BAB815872F30EC1F00626C1C /* ZIPFoundation */; };
+		BA15B75E2F32A99C0039E41B /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = BA15B75D2F32A99C0039E41B /* ZIPFoundation */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -27,7 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BAB815882F30EC1F00626C1C /* ZIPFoundation in Frameworks */,
+				BA15B75E2F32A99C0039E41B /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -70,7 +70,7 @@
 			);
 			name = ComicCatalog;
 			packageProductDependencies = (
-				BAB815872F30EC1F00626C1C /* ZIPFoundation */,
+				BA15B75D2F32A99C0039E41B /* ZIPFoundation */,
 			);
 			productName = ComicCatalog;
 			productReference = BAB815762F30D91700626C1C /* ComicCatalog.app */;
@@ -101,7 +101,7 @@
 			mainGroup = BAB8156D2F30D91700626C1C;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				BAB815862F30EC1F00626C1C /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
+				BA15B75C2F32A99C0039E41B /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = BAB815772F30D91700626C1C /* Products */;
@@ -261,8 +261,18 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 4;
 				ENABLE_APP_SANDBOX = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Comic Catalog";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.magazines-and-newspapers";
@@ -293,8 +303,18 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 4;
 				ENABLE_APP_SANDBOX = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Comic Catalog";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.magazines-and-newspapers";
@@ -340,9 +360,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		BAB815862F30EC1F00626C1C /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
+		BA15B75C2F32A99C0039E41B /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/weichsel/ZIPFoundation";
+			repositoryURL = "https://github.com/weichsel/ZIPFoundation.git";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 0.9.20;
@@ -351,9 +371,9 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		BAB815872F30EC1F00626C1C /* ZIPFoundation */ = {
+		BA15B75D2F32A99C0039E41B /* ZIPFoundation */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = BAB815862F30EC1F00626C1C /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			package = BA15B75C2F32A99C0039E41B /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
 			productName = ZIPFoundation;
 		};
 /* End XCSwiftPackageProductDependency section */
