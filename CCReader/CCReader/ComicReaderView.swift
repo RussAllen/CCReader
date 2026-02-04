@@ -13,6 +13,7 @@ struct ComicReaderView: View {
     @StateObject private var archiveReader = ComicArchiveReader()
     @State private var currentPage = 0
     @State private var showingControls = true
+    @State private var lastSavedComicID: PersistentIdentifier?
     
     let comicBook: ComicBook
     
@@ -115,16 +116,35 @@ struct ComicReaderView: View {
                     .foregroundStyle(.white)
             }
         }
-        .task {
-            await archiveReader.loadArchive(from: comicBook.fileURL)
-            currentPage = comicBook.currentPage
+        .task(id: comicBook.persistentModelID) {
+            // Save progress from previous comic before loading new one
+            saveProgress()
+            
+            // Reset state when comic changes
+            showingControls = true
+            
+            // Load the new comic
+            if let resolvedURL = comicBook.resolvedURL() {
+                await archiveReader.loadArchive(from: resolvedURL)
+                currentPage = comicBook.currentPage
+            } else {
+                // Fallback to the stored URL if bookmark resolution fails
+                await archiveReader.loadArchive(from: comicBook.fileURL)
+                currentPage = comicBook.currentPage
+            }
+            
+            lastSavedComicID = comicBook.persistentModelID
         }
         .onDisappear {
             // Save current page when leaving
-            comicBook.currentPage = currentPage
-            comicBook.totalPages = archiveReader.pages.count
-            comicBook.lastOpenedDate = Date()
+            saveProgress()
         }
+    }
+    
+    private func saveProgress() {
+        comicBook.currentPage = currentPage
+        comicBook.totalPages = archiveReader.pages.count
+        comicBook.lastOpenedDate = Date()
     }
     
     private func nextPage() {

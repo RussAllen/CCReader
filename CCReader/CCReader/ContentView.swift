@@ -14,6 +14,9 @@ struct ContentView: View {
     @Query(sort: \ComicBook.lastOpenedDate, order: .reverse) private var comicBooks: [ComicBook]
     @State private var selectedComicBook: ComicBook?
     @State private var showingFilePicker = false
+    @State private var showingDeleteAlert = false
+    @State private var comicsToDelete: IndexSet?
+    @State private var comicToDelete: ComicBook?
 
     var body: some View {
         NavigationSplitView {
@@ -37,8 +40,24 @@ struct ContentView: View {
                         }
                         .padding(.vertical, 4)
                     }
+                    .contextMenu {
+                        Button("Remove from Library Only", role: .destructive) {
+                            comicToDelete = comic
+                            showingDeleteAlert = true
+                            comicsToDelete = nil // Using context menu, not swipe
+                        }
+                        Button("Delete File and Remove from Library", role: .destructive) {
+                            comicToDelete = comic
+                            showingDeleteAlert = true
+                            comicsToDelete = IndexSet(integer: -1) // Signal to delete file
+                        }
+                    }
                 }
-                .onDelete(perform: deleteComics)
+                .onDelete { offsets in
+                    comicsToDelete = offsets
+                    showingDeleteAlert = true
+                    comicToDelete = nil
+                }
             }
             .navigationTitle("Comic Reader")
             .navigationSplitViewColumnWidth(min: 250, ideal: 300)
@@ -51,10 +70,54 @@ struct ContentView: View {
             }
             .fileImporter(
                 isPresented: $showingFilePicker,
-                allowedContentTypes: [.zip, UTType(filenameExtension: "cbz")!],
+                allowedContentTypes: [
+                    .zip,
+                    UTType(filenameExtension: "cbz")!,
+                    UTType(filenameExtension: "cbr")!
+                ],
                 allowsMultipleSelection: false
             ) { result in
                 handleFileSelection(result)
+            }
+            .alert("Remove Comic", isPresented: $showingDeleteAlert) {
+                // Handle context menu deletion (single comic)
+                if let comic = comicToDelete {
+                    // Check if we should delete file (indicated by IndexSet)
+                    if comicsToDelete?.first == -1 {
+                        Button("Delete File and Remove from Library", role: .destructive) {
+                            deleteComic(comic, deleteFile: true)
+                        }
+                    } else {
+                        Button("Remove from Library Only", role: .destructive) {
+                            deleteComic(comic, deleteFile: false)
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {
+                        comicToDelete = nil
+                        comicsToDelete = nil
+                    }
+                } else if let offsets = comicsToDelete {
+                    // Handle swipe/keyboard deletion (batch)
+                    Button("Remove from Library Only", role: .destructive) {
+                        deleteComics(offsets: offsets, deleteFile: false)
+                    }
+                    Button("Delete File and Remove from Library", role: .destructive) {
+                        deleteComics(offsets: offsets, deleteFile: true)
+                    }
+                    Button("Cancel", role: .cancel) {
+                        comicsToDelete = nil
+                    }
+                }
+            } message: {
+                if comicToDelete != nil {
+                    if comicsToDelete?.first == -1 {
+                        Text("This will permanently delete '\(comicToDelete!.title)' from your device.")
+                    } else {
+                        Text("This will remove '\(comicToDelete!.title)' from your library but keep the file on your device.")
+                    }
+                } else {
+                    Text("Do you want to remove this comic from your library only, or also delete the file from your device?")
+                }
             }
         } detail: {
             if let selectedComicBook {
@@ -67,7 +130,7 @@ struct ContentView: View {
                     Text("Select a comic or open a new one")
                         .font(.title2)
                         .foregroundStyle(.secondary)
-                    Text("Supported formats: CBZ")
+                    Text("Supported formats: CBZ, CBR")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -80,19 +143,34 @@ struct ContentView: View {
         case .success(let urls):
             guard let url = urls.first else { return }
             
-            // Get a security-scoped bookmark
-            guard url.startAccessingSecurityScopedResource() else {
-                print("Failed to access file")
+            // Try to access security-scoped resource (may not be needed for all files)
+            let didStartAccessing = url.startAccessingSecurityScopedResource()
+            
+            defer {
+                if didStartAccessing {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+            
+            // Create a bookmark for persistent access
+            var bookmarkData: Data?
+            do {
+                bookmarkData = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+                print("Successfully created bookmark for: \(url.lastPathComponent)")
+            } catch {
+                print("Failed to create bookmark: \(error.localizedDescription)")
+                // Continue anyway - the app might still work without bookmarks
+            }
+            
+            // Verify the file exists and is accessible
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                print("File does not exist at path: \(url.path)")
                 return
             }
             
-            defer {
-                url.stopAccessingSecurityScopedResource()
-            }
-            
-            // Create the comic book entry with the file URL
+            // Create the comic book entry with the file URL and bookmark
             let title = url.deletingPathExtension().lastPathComponent
-            let newComic = ComicBook(title: title, fileURL: url)
+            let newComic = ComicBook(title: title, fileURL: url, bookmarkData: bookmarkData)
             
             modelContext.insert(newComic)
             
@@ -100,16 +178,79 @@ struct ContentView: View {
             selectedComicBook = newComic
             
         case .failure(let error):
-            print("File selection failed: \(error)")
+            print("File selection failed: \(error.localizedDescription)")
         }
     }
 
-    private func deleteComics(offsets: IndexSet) {
+    private func deleteComics(offsets: IndexSet, deleteFile: Bool) {
         withAnimation {
             for index in offsets {
-                modelContext.delete(comicBooks[index])
+                let comic = comicBooks[index]
+                
+                // Clear selection if this comic is currently selected
+                if selectedComicBook?.persistentModelID == comic.persistentModelID {
+                    selectedComicBook = nil
+                }
+                
+                // Optionally delete the physical file
+                if deleteFile {
+                    let fileURL = comic.fileURL
+                    if fileURL.startAccessingSecurityScopedResource() {
+                        defer {
+                            fileURL.stopAccessingSecurityScopedResource()
+                        }
+                        
+                        do {
+                            try FileManager.default.removeItem(at: fileURL)
+                            print("Deleted file: \(fileURL.path)")
+                        } catch {
+                            print("Failed to delete file: \(error.localizedDescription)")
+                            // Continue with database deletion even if file deletion fails
+                        }
+                    }
+                }
+                
+                // Delete from SwiftData
+                modelContext.delete(comic)
             }
         }
+        
+        // Clear the deletion state
+        comicsToDelete = nil
+    }
+    
+    private func deleteComic(_ comic: ComicBook, deleteFile: Bool) {
+        withAnimation {
+            // Clear selection if this comic is currently selected
+            if selectedComicBook?.persistentModelID == comic.persistentModelID {
+                selectedComicBook = nil
+            }
+            
+            // Optionally delete the physical file
+            if deleteFile {
+                let fileURL = comic.fileURL
+                if fileURL.startAccessingSecurityScopedResource() {
+                    defer {
+                        fileURL.stopAccessingSecurityScopedResource()
+                    }
+                    
+                    do {
+                        try FileManager.default.removeItem(at: fileURL)
+                        print("Deleted file: \(fileURL.path)")
+                    } catch {
+                        print("Failed to delete file: \(error.localizedDescription)")
+                        // Continue with database deletion even if file deletion fails
+                    }
+                }
+            }
+            
+            // Delete from SwiftData
+            modelContext.delete(comic)
+        }
+        
+        // Clear the deletion state
+        comicToDelete = nil
+        comicsToDelete = nil
     }
 }
 
