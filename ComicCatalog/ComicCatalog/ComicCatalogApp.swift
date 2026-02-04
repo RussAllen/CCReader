@@ -116,16 +116,72 @@ class FolderNode: Identifiable, Hashable {
 
 // MARK: - Comic File Handler
 class ComicFileHandler {
+    // Track unar availability to avoid repeated checks
+    private static var unarAvailable: Bool?
+    private static var unarPath: String?
+    
     static func extractCover(from fileURL: URL) -> Data? {
         print("=== Attempting to extract cover from: \(fileURL.path)")
         let ext = fileURL.pathExtension.lowercased()
         print("File extension: \(ext)")
+        
+        // Check if sandboxed
+        let isSandboxed = ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil
+        print("App is sandboxed: \(isSandboxed)")
         
         if ext == "cbz" {
             print("This is a CBZ file, attempting extraction...")
             return extractCoverFromCBZ(fileURL)
         } else if ext == "cbr" {
             print("This is a CBR file, attempting extraction...")
+            
+            if isSandboxed {
+                print("❌ ERROR: Cannot extract CBR in sandboxed app")
+                print("The app is running in sandbox mode which prevents executing external tools")
+                print("To fix: Remove 'App Sandbox' capability in Xcode and rebuild")
+                
+                // Only show alert once
+                if unarAvailable == nil {
+                    unarAvailable = false
+                    DispatchQueue.main.async {
+                        showUnarNotInstalledAlert()
+                    }
+                }
+                return nil
+            }
+            
+            // Check unar availability first
+            if unarAvailable == nil {
+                print("Checking for unar availability...")
+                unarPath = findUnarPath()
+                unarAvailable = unarPath != nil
+                
+                print("unar found: \(unarAvailable ?? false)")
+                if let path = unarPath {
+                    print("unar path: \(path)")
+                } else {
+                    print("unar path: not found")
+                }
+                
+                if unarAvailable == false {
+                    print("⚠️ WARNING: unar is not installed!")
+                    print("To extract CBR files, install unar using one of these methods:")
+                    print("  • Homebrew: brew install unar")
+                    print("  • Download from: https://theunarchiver.com/command-line")
+                    
+                    // Show alert to user
+                    DispatchQueue.main.async {
+                        showUnarNotInstalledAlert()
+                    }
+                }
+            }
+            
+            if unarAvailable == false {
+                print("Skipping CBR extraction - unar not available")
+                return nil
+            }
+            
+            print("Proceeding with CBR extraction...")
             return extractCoverFromCBR(fileURL)
         }
         
@@ -133,136 +189,255 @@ class ComicFileHandler {
         return nil
     }
     
+    private static func showUnarNotInstalledAlert() {
+        let alert = NSAlert()
+        
+        // Check if app is sandboxed
+        let environment = ProcessInfo.processInfo.environment
+        let isSandboxed = environment["APP_SANDBOX_CONTAINER_ID"] != nil
+        
+        if isSandboxed {
+            alert.messageText = "CBR Support Not Available (Sandboxed App)"
+            alert.informativeText = """
+            This app is running in a sandbox which prevents it from executing external tools like 'unar'.
+            
+            To enable CBR support:
+            1. Open your Xcode project
+            2. Select your target
+            3. Go to "Signing & Capabilities"
+            4. Remove "App Sandbox" capability
+            5. Rebuild the app
+            
+            Note: Sandboxed apps cannot execute external processes for security reasons.
+            """
+        } else {
+            alert.messageText = "CBR Support Not Available"
+            alert.informativeText = "To view CBR comic files, you need to install 'unar'.\n\nInstall via Terminal:\nbrew install unar\n\nor download from:\nhttps://theunarchiver.com/command-line"
+        }
+        
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        
+        if !isSandboxed {
+            alert.addButton(withTitle: "Copy Command")
+        }
+        
+        let response = alert.runModal()
+        if response == .alertSecondButtonReturn && !isSandboxed {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString("brew install unar", forType: .string)
+        }
+    }
+    
     private static func extractCoverFromCBR(_ fileURL: URL) -> Data? {
         print("Starting CBR extraction using command-line unar...")
+        print("File: \(fileURL.lastPathComponent)")
         
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            print("ERROR: File does not exist at path: \(fileURL.path)")
+            print("❌ ERROR: File does not exist at path: \(fileURL.path)")
             return nil
         }
         
-        // Check if unar is installed
-        let checkUnar = Process()
-        checkUnar.launchPath = "/usr/bin/which"
-        checkUnar.arguments = ["unar"]
+        print("✓ File exists")
         
-        let checkPipe = Pipe()
-        checkUnar.standardOutput = checkPipe
-        checkUnar.standardError = checkPipe
-        
-        do {
-            try checkUnar.run()
-            checkUnar.waitUntilExit()
-            
-            if checkUnar.terminationStatus != 0 {
-                print("ERROR: unar command not found. Install with: brew install unar")
-                return nil
-            }
-        } catch {
-            print("ERROR checking for unar: \(error)")
+        // Use cached unar path
+        guard let executablePath = unarPath else {
+            print("❌ ERROR: unar path not found")
             return nil
         }
+        
+        print("✓ Using unar at: \(executablePath)")
+        
+        // Verify unar is executable
+        guard FileManager.default.isExecutableFile(atPath: executablePath) else {
+            print("❌ ERROR: unar at \(executablePath) is not executable")
+            return nil
+        }
+        
+        print("✓ unar is executable")
         
         // Create temp directory
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        defer {
-            try? FileManager.default.removeItem(at: tempDir)
-        }
-        
-        // List contents of RAR file
-        let listProcess = Process()
-        listProcess.launchPath = "/usr/local/bin/unar"
-        listProcess.arguments = ["-l", fileURL.path]
-        
-        let listPipe = Pipe()
-        listProcess.standardOutput = listPipe
+        print("Creating temp directory: \(tempDir.path)")
         
         do {
-            try listProcess.run()
-            listProcess.waitUntilExit()
-            
-            let listData = listPipe.fileHandleForReading.readDataToEndOfFile()
-            guard let listOutput = String(data: listData, encoding: .utf8) else {
-                print("ERROR: Could not read unar output")
-                return nil
+            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+            print("✓ Temp directory created")
+        } catch {
+            print("❌ ERROR creating temp directory: \(error)")
+            return nil
+        }
+        
+        defer {
+            do {
+                try FileManager.default.removeItem(at: tempDir)
+                print("✓ Cleaned up temp directory")
+            } catch {
+                print("⚠️ Warning: Could not clean up temp directory: \(error)")
             }
-            
-            // Parse unar output to find first image file
-            let imageExtensions = ["jpg", "jpeg", "png", "gif", "webp"]
-            var firstImage: String?
-            
-            for line in listOutput.components(separatedBy: .newlines) {
-                // unar -l output format has filenames after some metadata
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                if trimmed.isEmpty { continue }
-                
-                for ext in imageExtensions {
-                    if trimmed.lowercased().hasSuffix(".\(ext)") {
-                        firstImage = trimmed
-                        break
-                    }
-                }
-                if firstImage != nil { break }
-            }
-            
-            guard let imageFile = firstImage else {
-                print("ERROR: No image files found in archive")
-                return nil
-            }
-            
-            print("Found first image: \(imageFile)")
-            
-            // Extract the entire archive to temp directory (unar doesn't support single file extraction easily)
-            let extractProcess = Process()
-            extractProcess.launchPath = "/usr/local/bin/unar"
-            extractProcess.arguments = ["-o", tempDir.path, "-f", fileURL.path]
-            
+        }
+        
+        // Extract the entire archive to temp directory
+        print("Preparing to extract archive...")
+        let extractProcess = Process()
+        extractProcess.executableURL = URL(fileURLWithPath: executablePath)
+        extractProcess.arguments = [
+            "-o", tempDir.path,  // Output directory
+            "-f",                 // Force overwrite
+            "-q",                 // Quiet mode
+            "-D",                 // Don't create subdirectory
+            fileURL.path
+        ]
+        
+        print("Command: \(executablePath) \(extractProcess.arguments?.joined(separator: " ") ?? "")")
+        
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        extractProcess.standardOutput = outputPipe
+        extractProcess.standardError = errorPipe
+        
+        do {
+            print("Launching unar process...")
             try extractProcess.run()
+            print("✓ Process launched, waiting for completion...")
             extractProcess.waitUntilExit()
             
-            if extractProcess.terminationStatus != 0 {
-                print("ERROR: Failed to extract archive")
-                return nil
-            }
+            let terminationStatus = extractProcess.terminationStatus
+            print("Process terminated with status: \(terminationStatus)")
             
-            // Find the extracted image file
-            let fileManager = FileManager.default
-            guard let extractedContents = try? fileManager.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil) else {
-                print("ERROR: Could not list extracted files")
-                return nil
-            }
-            
-            // Find first image file in extracted contents
-            for item in extractedContents {
-                let ext = item.pathExtension.lowercased()
-                if imageExtensions.contains(ext) {
-                    let imageData = try Data(contentsOf: item)
-                    print("SUCCESS: Extracted \(imageData.count) bytes from \(item.lastPathComponent)")
-                    return imageData
-                }
+            if terminationStatus != 0 {
+                let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                let errorString = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+                let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+                let outputString = String(data: outputData, encoding: .utf8) ?? ""
                 
-                // Check if it's a subdirectory and recurse
-                var isDirectory: ObjCBool = false
-                if fileManager.fileExists(atPath: item.path, isDirectory: &isDirectory), isDirectory.boolValue {
-                    if let subContents = try? fileManager.contentsOfDirectory(at: item, includingPropertiesForKeys: nil) {
-                        for subItem in subContents.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-                            let ext = subItem.pathExtension.lowercased()
-                            if imageExtensions.contains(ext) {
-                                let imageData = try Data(contentsOf: subItem)
-                                print("SUCCESS: Extracted \(imageData.count) bytes from \(subItem.lastPathComponent)")
-                                return imageData
-                            }
-                        }
-                    }
-                }
+                print("❌ ERROR: unar failed with status \(terminationStatus)")
+                print("Error output: \(errorString)")
+                print("Standard output: \(outputString)")
+                return nil
             }
             
-            print("ERROR: Could not find extracted image file")
-            return nil
+            print("✓ Archive extracted successfully")
+            
+            // Find the first image file in the extracted contents
+            print("Searching for images in extracted files...")
+            let result = findFirstImageInDirectory(tempDir)
+            
+            if result != nil {
+                print("✓ Successfully extracted cover image")
+            } else {
+                print("❌ Failed to find image in extracted files")
+            }
+            
+            return result
             
         } catch {
-            print("ERROR extracting from CBR: \(error)")
+            print("❌ ERROR running unar process: \(error)")
+            if let posixError = error as? POSIXError {
+                print("POSIX Error Code: \(posixError.code)")
+            }
+            return nil
+        }
+    }
+    
+    private static func findUnarPath() -> String? {
+        // Common installation paths for unar
+        let possiblePaths = [
+            "/usr/local/bin/unar",
+            "/opt/homebrew/bin/unar",
+            "/opt/local/bin/unar",
+            "/usr/bin/unar"
+        ]
+        
+        for path in possiblePaths {
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+        
+        // Try using 'which' command as fallback
+        let whichProcess = Process()
+        whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        whichProcess.arguments = ["unar"]
+        
+        let pipe = Pipe()
+        whichProcess.standardOutput = pipe
+        whichProcess.standardError = Pipe()
+        
+        do {
+            try whichProcess.run()
+            whichProcess.waitUntilExit()
+            
+            if whichProcess.terminationStatus == 0 {
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !path.isEmpty {
+                    return path
+                }
+            }
+        } catch {
+            print("Error running which: \(error)")
+        }
+        
+        return nil
+    }
+    
+    private static func findFirstImageInDirectory(_ directory: URL) -> Data? {
+        print("Searching for images in: \(directory.path)")
+        let fileManager = FileManager.default
+        let imageExtensions = ["jpg", "jpeg", "png", "gif", "webp", "bmp"]
+        
+        // Get all files recursively
+        guard let enumerator = fileManager.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            print("❌ ERROR: Could not create directory enumerator")
+            return nil
+        }
+        
+        var imageFiles: [(url: URL, name: String)] = []
+        var totalFiles = 0
+        
+        for case let fileURL as URL in enumerator {
+            totalFiles += 1
+            let ext = fileURL.pathExtension.lowercased()
+            
+            if imageExtensions.contains(ext) {
+                imageFiles.append((url: fileURL, name: fileURL.lastPathComponent))
+                print("  Found image: \(fileURL.lastPathComponent)")
+            }
+        }
+        
+        print("Scanned \(totalFiles) total files")
+        print("Found \(imageFiles.count) image files")
+        
+        guard !imageFiles.isEmpty else {
+            print("❌ ERROR: No image files found in archive")
+            return nil
+        }
+        
+        // Sort by filename to get the first page
+        imageFiles.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        
+        let firstImage = imageFiles[0]
+        print("Selected first image: \(firstImage.name)")
+        
+        do {
+            let imageData = try Data(contentsOf: firstImage.url)
+            print("✓ SUCCESS: Read \(imageData.count) bytes from \(firstImage.name)")
+            
+            // Verify it's a valid image by trying to create NSImage
+            if let nsImage = NSImage(data: imageData) {
+                print("✓ Verified as valid image: \(nsImage.size.width)x\(nsImage.size.height)")
+            } else {
+                print("⚠️ WARNING: Data loaded but NSImage creation failed")
+            }
+            
+            return imageData
+        } catch {
+            print("❌ ERROR reading image file: \(error)")
             return nil
         }
     }
@@ -314,6 +489,73 @@ class ComicFileHandler {
         }
     }
     
+    // MARK: - Diagnostics
+    
+    /// Check if the app is sandboxed
+    private static func isAppSandboxed() -> Bool {
+        let environment = ProcessInfo.processInfo.environment
+        return environment["APP_SANDBOX_CONTAINER_ID"] != nil
+    }
+    
+    /// Check if unar is available and return diagnostic information
+    static func checkUnarStatus() -> (available: Bool, path: String?, message: String) {
+        let isSandboxed = isAppSandboxed()
+        
+        if isSandboxed {
+            let message = """
+            ⚠️ App is running in Sandbox mode
+            
+            Sandboxed apps cannot execute external processes for security reasons.
+            CBR files require the 'unar' command-line tool which cannot be run from a sandboxed app.
+            
+            To enable CBR support:
+            1. Open your Xcode project
+            2. Select your app target
+            3. Go to "Signing & Capabilities" tab
+            4. Remove "App Sandbox" capability
+            5. Clean build (Product → Clean Build Folder)
+            6. Rebuild and run
+            
+            CBZ files work fine in sandboxed mode (no external tools needed).
+            """
+            return (false, nil, message)
+        }
+        
+        if let path = findUnarPath() {
+            let isExecutable = FileManager.default.isExecutableFile(atPath: path)
+            if isExecutable {
+                let message = """
+                ✓ unar found and ready
+                Location: \(path)
+                
+                CBR file extraction should work!
+                """
+                return (true, path, message)
+            } else {
+                let message = """
+                ⚠️ unar found but not executable
+                Location: \(path)
+                
+                Fix with: chmod +x \(path)
+                """
+                return (false, path, message)
+            }
+        } else {
+            let message = """
+            ❌ unar not found. CBR files cannot be processed.
+            
+            Install unar using Homebrew:
+              brew install unar
+            
+            Or download from:
+              https://theunarchiver.com/command-line
+            
+            After installing, restart this app.
+            """
+            return (false, nil, message)
+        }
+    }
+    
     static func findComicsInFolder(_ folderURL: URL) -> [URL] {
         var results: [URL] = []
         let fileManager = FileManager.default
@@ -362,6 +604,8 @@ struct ContentView: View {
     @State private var showingComicDetail: Comic?
     @State private var folderTree: [FolderNode] = []
     @State private var folderAccessURLs: [URL] = [] // Store URLs we have access to
+    @State private var showingUnarStatus = false
+    @State private var unarStatusMessage = ""
     
     var body: some View {
         NavigationSplitView {
@@ -371,6 +615,17 @@ struct ContentView: View {
                     Text("Library Folders")
                         .font(.headline)
                     Spacer()
+                    
+                    // Check unar status button
+                    Button {
+                        let status = ComicFileHandler.checkUnarStatus()
+                        unarStatusMessage = status.message
+                        showingUnarStatus = true
+                    } label: {
+                        Image(systemName: "info.circle")
+                    }
+                    .help("Check CBR Support Status")
+                    
                     Button {
                         showingManageFolders = true
                     } label: {
@@ -529,6 +784,17 @@ struct ContentView: View {
                 showingLibrary = false
                 showingComicDetail = comic
             })
+        }
+        .alert("CBR Support Status", isPresented: $showingUnarStatus) {
+            Button("OK") { }
+            if !ComicFileHandler.checkUnarStatus().available {
+                Button("Copy Install Command") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString("brew install unar", forType: .string)
+                }
+            }
+        } message: {
+            Text(unarStatusMessage)
         }
     }
     
