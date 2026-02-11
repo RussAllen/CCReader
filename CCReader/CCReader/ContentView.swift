@@ -54,61 +54,8 @@ struct ContentView: View {
         }
     }
     
-    // Temporary placeholder until KomgaLibraryView is added to Xcode target
     private var komgaPlaceholderView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "network.slash")
-                .font(.system(size: 80))
-                .foregroundStyle(.secondary)
-            
-            Text("Komga Support Available")
-                .font(.title)
-            
-            Text("To enable Komga, add these files to your Xcode project:")
-                .font(.body)
-                .multilineTextAlignment(.center)
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("• KomgaAPI.swift")
-                Text("• KomgaModels.swift")
-                Text("• KomgaBookReader.swift")
-                Text("• KomgaLibraryView.swift")
-                Text("• KomgaServerSettingsView.swift")
-                Text("• KomgaComicReaderView.swift")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .padding()
-            .background(Color.secondary.opacity(0.1))
-            .cornerRadius(8)
-            
-            Text("Files are located in your project folder at:")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            
-            Text("/Volumes/Photos/Coding/CCReader/CCReader/")
-                .font(.caption.monospaced())
-                .foregroundStyle(.blue)
-                .textSelection(.enabled)
-                .padding(8)
-                .background(Color.blue.opacity(0.1))
-                .cornerRadius(6)
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("To add files to Xcode:")
-                    .font(.headline)
-                
-                Text("1. Right-click on 'CCReader' folder in Project Navigator")
-                Text("2. Choose 'Add Files to CCReader...'")
-                Text("3. Select all 6 Komga files")
-                Text("4. Ensure 'CCReader' target is checked")
-                Text("5. Click 'Add'")
-            }
-            .font(.caption)
-            .frame(maxWidth: 500)
-            .padding()
-        }
-        .padding()
+        KomgaLibraryView()
     }
     
     private var localLibraryView: some View {
