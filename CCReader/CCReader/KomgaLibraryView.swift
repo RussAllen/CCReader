@@ -18,6 +18,121 @@ struct KomgaLibraryView: View {
     @State private var isLoading = false
     @State private var showingSettings = false
     @State private var thumbnails: [String: NSImage] = [:] // Cache for thumbnails
+    @State private var errorMessage: String?
+    @State private var debugInfo: String = ""
+    @State private var selectedLetter: String? = nil // Start with no letter filter (All Series)
+    @State private var searchText: String = ""
+    
+    // All available letters based on series
+    private var availableLetters: [String] {
+        var letters = Set<String>()
+        var hasNumbers = false
+        var hasSymbols = false
+        
+        for series in series {
+            let title = series.metadata?.titleSort ?? series.metadata?.title ?? series.name
+            if let firstChar = title.first {
+                let upperChar = String(firstChar).uppercased()
+                
+                if upperChar.rangeOfCharacter(from: .letters) != nil {
+                    letters.insert(upperChar)
+                } else if upperChar.rangeOfCharacter(from: .decimalDigits) != nil {
+                    hasNumbers = true
+                } else {
+                    hasSymbols = true
+                }
+            }
+        }
+        
+        var result: [String] = []
+        
+        // Add # for numbers
+        if hasNumbers {
+            result.append("#")
+        }
+        
+        // Add * for symbols
+        if hasSymbols {
+            result.append("*")
+        }
+        
+        // Add letters A-Z
+        result.append(contentsOf: letters.sorted())
+        
+        return result
+    }
+    
+    // Complete alphabet A-Z plus special characters for the dropdown
+    private var allLetterOptions: [String] {
+        var result: [String] = []
+        
+        // Check if we have any numbers or symbols
+        var hasNumbers = false
+        var hasSymbols = false
+        
+        for series in series {
+            let title = series.metadata?.titleSort ?? series.metadata?.title ?? series.name
+            if let firstChar = title.first {
+                let upperChar = String(firstChar).uppercased()
+                
+                if upperChar.rangeOfCharacter(from: .decimalDigits) != nil {
+                    hasNumbers = true
+                } else if upperChar.rangeOfCharacter(from: .letters) == nil {
+                    hasSymbols = true
+                }
+            }
+        }
+        
+        // Add special characters only if they exist
+        if hasNumbers {
+            result.append("#")
+        }
+        if hasSymbols {
+            result.append("*")
+        }
+        
+        // Add full A-Z alphabet
+        result.append(contentsOf: stride(from: UnicodeScalar("A").value, through: UnicodeScalar("Z").value, by: 1)
+            .compactMap { String(UnicodeScalar($0)!) })
+        
+        return result
+    }
+    
+    // Filtered series based on selected letter and search text
+    private var filteredSeries: [KomgaSeries] {
+        var result = series
+        
+        // Filter by letter
+        if let letter = selectedLetter {
+            result = result.filter { series in
+                let title = series.metadata?.titleSort ?? series.metadata?.title ?? series.name
+                guard let firstChar = title.first else { return false }
+                let upperChar = String(firstChar).uppercased()
+                
+                if letter == "#" {
+                    // Show items starting with numbers
+                    return upperChar.rangeOfCharacter(from: .decimalDigits) != nil
+                } else if letter == "*" {
+                    // Show items starting with symbols
+                    return upperChar.rangeOfCharacter(from: .letters) == nil && 
+                           upperChar.rangeOfCharacter(from: .decimalDigits) == nil
+                } else {
+                    // Show items starting with the selected letter
+                    return upperChar == letter
+                }
+            }
+        }
+        
+        // Filter by search text
+        if !searchText.isEmpty {
+            result = result.filter { series in
+                let title = (series.metadata?.title ?? series.name).lowercased()
+                return title.contains(searchText.lowercased())
+            }
+        }
+        
+        return result
+    }
     
     @AppStorage("komgaServerURL") private var serverURL = ""
     @AppStorage("komgaUsername") private var username = ""
@@ -79,6 +194,18 @@ struct KomgaLibraryView: View {
             }
             
             if api.isConnected {
+                ToolbarItem(placement: .status) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "circle.fill")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.green)
+                        
+                        Text(debugInfo.isEmpty ? "Connected" : debugInfo)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
                 ToolbarItem(placement: .automatic) {
                     Button(action: { Task { await loadData() } }) {
                         Label("Refresh", systemImage: "arrow.clockwise")
@@ -88,6 +215,9 @@ struct KomgaLibraryView: View {
             }
         }
         .onChange(of: selectedLibrary) { _, _ in
+            // Reset filters when changing libraries
+            selectedLetter = nil
+            searchText = ""
             Task {
                 await loadSeries()
             }
@@ -99,6 +229,13 @@ struct KomgaLibraryView: View {
             if libraries.count > 1 {
                 librarySection
             }
+            
+            // Search bar and alphabet filter
+            if !series.isEmpty {
+                searchSection
+                alphabetFilterSection
+            }
+            
             seriesSection
         }
         .navigationTitle(serverName)
@@ -116,13 +253,122 @@ struct KomgaLibraryView: View {
         }
     }
     
+    private var searchSection: some View {
+        Section {
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                
+                TextField("Search series...", text: $searchText)
+                    .textFieldStyle(.plain)
+                
+                if !searchText.isEmpty {
+                    Button(action: { 
+                        searchText = ""
+                        selectedLetter = nil
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+    }
+    
+    private var alphabetFilterSection: some View {
+        Section {
+            Picker("Filter by Letter", selection: $selectedLetter) {
+                Text("All Series").tag(nil as String?)
+                
+                ForEach(allLetterOptions, id: \.self) { letter in
+                    if letter == "#" {
+                        Text("# (Numbers)").tag(letter as String?)
+                    } else if letter == "*" {
+                        Text("* (Symbols)").tag(letter as String?)
+                    } else {
+                        // Show count if series exist for this letter
+                        let count = series.filter { s in
+                            let title = s.metadata?.titleSort ?? s.metadata?.title ?? s.name
+                            return title.uppercased().hasPrefix(letter)
+                        }.count
+                        
+                        if count > 0 {
+                            Text("\(letter) (\(count))").tag(letter as String?)
+                        } else {
+                            Text(letter).tag(letter as String?)
+                        }
+                    }
+                }
+            }
+            .pickerStyle(.menu)
+        } header: {
+            HStack {
+                Text("Filter")
+                Spacer()
+                if selectedLetter != nil || !searchText.isEmpty {
+                    Text("\(filteredSeries.count) of \(series.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+    
     private var seriesSection: some View {
         Section("Series") {
             if isLoading {
-                ProgressView()
-                    .frame(maxWidth: .infinity, alignment: .center)
+                VStack(spacing: 8) {
+                    ProgressView()
+                    Text("Loading series...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding()
+            } else if filteredSeries.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "books.vertical")
+                        .font(.system(size: 40))
+                        .foregroundStyle(.secondary)
+                    
+                    if selectedLetter != nil {
+                        Text("No series starting with '\(selectedLetter!)'")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                        
+                        Button("Show All") {
+                            selectedLetter = nil
+                        }
+                        .buttonStyle(.bordered)
+                    } else {
+                        Text("No series found")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                        
+                        if let library = selectedLibrary {
+                            Text("Library: \(library.name)")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        } else {
+                            Text("Try selecting a different library")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    
+                    if let error = errorMessage {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .padding(.top, 4)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
             } else {
-                ForEach(series) { item in
+                ForEach(filteredSeries) { item in
                     SeriesRowView(series: item, thumbnail: thumbnails[item.id])
                         .task {
                             await loadThumbnail(for: item)
@@ -171,11 +417,45 @@ struct KomgaLibraryView: View {
     
     private func booksListView(for series: KomgaSeries) -> some View {
         List(selection: $selectedBook) {
-            ForEach(books) { book in
-                BookRowView(book: book, thumbnail: thumbnails[book.id])
-                    .task {
-                        await loadThumbnail(for: book)
+            if books.isEmpty && !isLoading {
+                VStack(spacing: 12) {
+                    Image(systemName: "book")
+                        .font(.system(size: 40))
+                        .foregroundStyle(.secondary)
+                    
+                    Text("No books found in this series")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                    
+                    Text(series.metadata?.title ?? series.name)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                    
+                    if let count = series.booksCount, count > 0 {
+                        Text("Expected \(count) books from server")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
                     }
+                    
+                    Button("Reload Books") {
+                        Task {
+                            await loadBooks(for: series)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding()
+            } else if isLoading {
+                ProgressView("Loading books...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ForEach(books) { book in
+                    BookRowView(book: book, thumbnail: thumbnails[book.id])
+                        .task {
+                            await loadThumbnail(for: book)
+                        }
+                }
             }
         }
         .navigationTitle(series.metadata?.title ?? series.name)
@@ -200,6 +480,7 @@ struct KomgaLibraryView: View {
         Group {
             if let selectedBook {
                 KomgaComicReaderView(book: selectedBook, api: api)
+                    .id(selectedBook.id) // Force view to recreate when book changes
             } else {
                 emptyReaderView
             }
@@ -245,33 +526,114 @@ struct KomgaLibraryView: View {
     private func loadLibraries() async {
         do {
             libraries = try await api.fetchLibraries()
+            debugInfo = "Loaded \(libraries.count) libraries"
+            print("✅ Loaded \(libraries.count) libraries: \(libraries.map { $0.name }.joined(separator: ", "))")
+            errorMessage = nil
         } catch {
-            print("Failed to load libraries: \(error)")
+            errorMessage = "Failed to load libraries: \(error.localizedDescription)"
+            print("❌ Failed to load libraries: \(error)")
         }
     }
     
     private func loadSeries() async {
         isLoading = true
+        errorMessage = nil
         defer { isLoading = false }
         
         do {
-            let response = try await api.fetchSeries(
-                libraryId: selectedLibrary?.id,
-                page: 0,
-                size: 100
-            )
-            series = response.content
+            var allSeries: [KomgaSeries] = []
+            var currentPage = 0
+            var totalPages = 1
+            
+            // Load all pages
+            while currentPage < totalPages {
+                print("📚 Loading series page \(currentPage + 1)...")
+                
+                let response = try await api.fetchSeries(
+                    libraryId: selectedLibrary?.id,
+                    page: currentPage,
+                    size: 500 // Larger page size for efficiency
+                )
+                
+                allSeries.append(contentsOf: response.content)
+                
+                // Update total pages from response
+                if let pages = response.totalPages {
+                    totalPages = pages
+                }
+                
+                currentPage += 1
+                
+                // Safety check to prevent infinite loops
+                if currentPage > 100 {
+                    print("⚠️ Too many pages, stopping at page 100")
+                    break
+                }
+            }
+            
+            series = allSeries
+            
+            let libraryName = selectedLibrary?.name ?? "All Libraries"
+            debugInfo = "Loaded \(series.count) series from \(libraryName)"
+            print("✅ Loaded \(series.count) series from \(libraryName) (across \(currentPage) page(s))")
+            
+            if series.isEmpty {
+                errorMessage = "No series found in this library"
+            }
         } catch {
-            print("Failed to load series: \(error)")
+            errorMessage = "Failed to load series: \(error.localizedDescription)"
+            print("❌ Failed to load series: \(error)")
         }
     }
     
     private func loadBooks(for series: KomgaSeries) async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        
         do {
-            let response = try await api.fetchBooks(seriesId: series.id, page: 0, size: 100)
-            books = response.content
+            print("📖 Loading books for series: \(series.name) (ID: \(series.id))")
+            print("   Series reports \(series.booksCount ?? 0) books")
+            
+            var allBooks: [KomgaBook] = []
+            var currentPage = 0
+            var totalPages = 1
+            
+            // Load all pages
+            while currentPage < totalPages {
+                let response = try await api.fetchBooks(seriesId: series.id, page: currentPage, size: 500)
+                allBooks.append(contentsOf: response.content)
+                
+                // Update total pages from response
+                if let pages = response.totalPages {
+                    totalPages = pages
+                }
+                
+                currentPage += 1
+                
+                // Safety check
+                if currentPage > 50 {
+                    print("⚠️ Too many book pages, stopping at page 50")
+                    break
+                }
+            }
+            
+            books = allBooks
+            
+            print("✅ API returned \(books.count) books from series '\(series.name)' (across \(currentPage) page(s))")
+            
+            if books.isEmpty {
+                errorMessage = "No books found in this series"
+                print("⚠️ Series reports \(series.booksCount ?? 0) books but none were loaded")
+            } else {
+                debugInfo = "Loaded \(books.count) books"
+                // Print first few book titles for verification
+                let titles = books.prefix(3).map { $0.displayTitle }.joined(separator: ", ")
+                print("   First books: \(titles)")
+            }
         } catch {
-            print("Failed to load books: \(error)")
+            errorMessage = "Failed to load books: \(error.localizedDescription)"
+            print("❌ Failed to load books: \(error)")
         }
     }
     

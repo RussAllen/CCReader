@@ -32,9 +32,23 @@ struct KomgaServerSettingsView: View {
                 } header: {
                     Text("Server Information")
                 } footer: {
-                    Text("Enter the complete URL of your Komga server, including http:// or https://")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Enter the base URL of your Komga server:")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        
+                        Text("✅ Correct: http://192.168.1.100:8080")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                        
+                        Text("✅ Correct: https://komga.mydomain.com")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                        
+                        Text("❌ Wrong: http://192.168.1.100:8080/api/v1")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
                 }
                 
                 Section {

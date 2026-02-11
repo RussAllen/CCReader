@@ -162,6 +162,7 @@ struct ContentView: View {
         } detail: {
             if let selectedComicBook {
                 ComicReaderView(comicBook: selectedComicBook)
+                    .id(selectedComicBook.persistentModelID) // Force view to recreate when comic changes
             } else {
                 VStack(spacing: 20) {
                     Image(systemName: "book.pages")

@@ -97,13 +97,10 @@ class KomgaAPI: ObservableObject {
             throw KomgaError.notConnected
         }
         
-        guard var urlComponents = URLComponents(string: server.url) else {
-            throw KomgaError.invalidURL
-        }
+        let baseURL = server.url.hasSuffix("/") ? String(server.url.dropLast()) : server.url
+        let urlString = "\(baseURL)/api/v1/books/\(bookId)/pages/\(pageNumber)"
         
-        urlComponents.path = "/api/v1/books/\(bookId)/pages/\(pageNumber)"
-        
-        guard let url = urlComponents.url else {
+        guard let url = URL(string: urlString) else {
             throw KomgaError.invalidURL
         }
         
@@ -134,13 +131,10 @@ class KomgaAPI: ObservableObject {
             throw KomgaError.notConnected
         }
         
-        guard var urlComponents = URLComponents(string: server.url) else {
-            throw KomgaError.invalidURL
-        }
+        let baseURL = server.url.hasSuffix("/") ? String(server.url.dropLast()) : server.url
+        let urlString = "\(baseURL)/api/v1/series/\(seriesId)/thumbnail"
         
-        urlComponents.path = "/api/v1/series/\(seriesId)/thumbnail"
-        
-        guard let url = urlComponents.url else {
+        guard let url = URL(string: urlString) else {
             throw KomgaError.invalidURL
         }
         
@@ -169,13 +163,10 @@ class KomgaAPI: ObservableObject {
             throw KomgaError.notConnected
         }
         
-        guard var urlComponents = URLComponents(string: server.url) else {
-            throw KomgaError.invalidURL
-        }
+        let baseURL = server.url.hasSuffix("/") ? String(server.url.dropLast()) : server.url
+        let urlString = "\(baseURL)/api/v1/books/\(bookId)/thumbnail"
         
-        urlComponents.path = "/api/v1/books/\(bookId)/thumbnail"
-        
-        guard let url = urlComponents.url else {
+        guard let url = URL(string: urlString) else {
             throw KomgaError.invalidURL
         }
         
@@ -206,13 +197,10 @@ class KomgaAPI: ObservableObject {
             throw KomgaError.notConnected
         }
         
-        guard var urlComponents = URLComponents(string: server.url) else {
-            throw KomgaError.invalidURL
-        }
+        let baseURL = server.url.hasSuffix("/") ? String(server.url.dropLast()) : server.url
+        let urlString = "\(baseURL)/api/v1/books/\(bookId)/read-progress"
         
-        urlComponents.path = "/api/v1/books/\(bookId)/read-progress"
-        
-        guard let url = urlComponents.url else {
+        guard let url = URL(string: urlString) else {
             throw KomgaError.invalidURL
         }
         
@@ -244,13 +232,10 @@ class KomgaAPI: ObservableObject {
             throw KomgaError.notConnected
         }
         
-        guard var urlComponents = URLComponents(string: server.url) else {
-            throw KomgaError.invalidURL
-        }
+        let baseURL = server.url.hasSuffix("/") ? String(server.url.dropLast()) : server.url
+        let urlString = "\(baseURL)/api/v1/books/\(bookId)/read-progress"
         
-        urlComponents.path = "/api/v1/books/\(bookId)/read-progress"
-        
-        guard let url = urlComponents.url else {
+        guard let url = URL(string: urlString) else {
             throw KomgaError.invalidURL
         }
         
@@ -276,15 +261,18 @@ class KomgaAPI: ObservableObject {
             throw KomgaError.notConnected
         }
         
-        guard var urlComponents = URLComponents(string: server.url) else {
+        // Ensure server URL doesn't end with a slash
+        let baseURL = server.url.hasSuffix("/") ? String(server.url.dropLast()) : server.url
+        
+        // Construct the full URL by appending the endpoint
+        let fullURLString = baseURL + endpoint
+        
+        guard let url = URL(string: fullURLString) else {
+            print("❌ Invalid URL: \(fullURLString)")
             throw KomgaError.invalidURL
         }
         
-        urlComponents.path = endpoint
-        
-        guard let url = urlComponents.url else {
-            throw KomgaError.invalidURL
-        }
+        print("🌐 API Request: \(url.absoluteString)")
         
         var request = URLRequest(url: url)
         request.setValue("Basic \(server.basicAuthToken)", forHTTPHeaderField: "Authorization")
@@ -299,10 +287,12 @@ class KomgaAPI: ObservableObject {
         guard (200...299).contains(httpResponse.statusCode) else {
             // Try to decode error message
             if let errorMessage = String(data: data, encoding: .utf8) {
-                print("API Error: \(errorMessage)")
+                print("❌ API Error (\(httpResponse.statusCode)): \(errorMessage)")
             }
             throw KomgaError.httpError(statusCode: httpResponse.statusCode)
         }
+        
+        print("✅ API Response: \(httpResponse.statusCode)")
         
         do {
             let decoder = JSONDecoder()
