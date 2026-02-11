@@ -26,11 +26,11 @@ struct KomgaLibraryView: View {
     
     var body: some View {
         NavigationSplitView {
-            sidebarView
+            sidebarContent
         } content: {
-            contentView
+            contentColumn
         } detail: {
-            detailView
+            detailColumn
         }
         .sheet(isPresented: $showingSettings) {
             KomgaServerSettingsView(
@@ -60,12 +60,12 @@ struct KomgaLibraryView: View {
         }
     }
     
-    // MARK: - Sidebar View
+    // MARK: - Sidebar
     
-    private var sidebarView: some View {
+    private var sidebarContent: some View {
         VStack(spacing: 0) {
             if api.isConnected {
-                seriesListView
+                connectedSidebarView
             } else {
                 notConnectedView
             }
@@ -94,79 +94,41 @@ struct KomgaLibraryView: View {
         }
     }
     
-    private var seriesListView: some View {
+    private var connectedSidebarView: some View {
         List(selection: $selectedSeries) {
-            // Libraries Section
             if libraries.count > 1 {
-                Section("Libraries") {
-                    Picker("Library", selection: $selectedLibrary) {
-                        Text("All Libraries").tag(nil as KomgaLibrary?)
-                        ForEach(libraries) { library in
-                            Text(library.name).tag(library as KomgaLibrary?)
-                        }
-                    }
-                    .labelsHidden()
-                }
+                librarySection
             }
-            
-            // Series Section
-            Section("Series") {
-                if isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, alignment: .center)
-                } else {
-                    ForEach(series) { item in
-                        seriesRow(for: item)
-                    }
-                }
-            }
+            seriesSection
         }
         .navigationTitle(serverName)
     }
     
-    private func seriesRow(for item: KomgaSeries) -> some View {
-        NavigationLink(value: item) {
-            HStack(spacing: 12) {
-                // Thumbnail
-                if let thumbnail = thumbnails[item.id] {
-                    Image(nsImage: thumbnail)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 40, height: 60)
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                } else {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 40, height: 60)
-                        .overlay {
-                            Image(systemName: "book.closed")
-                                .foregroundStyle(.secondary)
-                        }
-                }
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.metadata?.title ?? item.name)
-                        .font(.headline)
-                    
-                    HStack {
-                        if let booksCount = item.booksCount {
-                            Text("\(booksCount) books")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        
-                        if let readCount = item.booksReadCount, readCount > 0 {
-                            Text("• \(readCount) read")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+    private var librarySection: some View {
+        Section("Libraries") {
+            Picker("Library", selection: $selectedLibrary) {
+                Text("All Libraries").tag(nil as KomgaLibrary?)
+                ForEach(libraries) { library in
+                    Text(library.name).tag(library as KomgaLibrary?)
                 }
             }
-            .padding(.vertical, 4)
+            .labelsHidden()
         }
-        .task {
-            await loadThumbnail(for: item)
+    }
+    
+    private var seriesSection: some View {
+        Section("Series") {
+            if isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity, alignment: .center)
+            } else {
+                ForEach(series) { item in
+                    SeriesRowView(series: item, thumbnail: thumbnails[item.id])
+                        .task {
+                            await loadThumbnail(for: item)
+                        }
+                }
+            }
         }
     }
     
@@ -195,14 +157,14 @@ struct KomgaLibraryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
-    // MARK: - Content View
+    // MARK: - Content Column
     
-    private var contentView: some View {
+    private var contentColumn: some View {
         Group {
             if let selectedSeries {
                 booksListView(for: selectedSeries)
             } else {
-                emptySelectionView
+                emptyBooksView
             }
         }
     }
@@ -210,76 +172,17 @@ struct KomgaLibraryView: View {
     private func booksListView(for series: KomgaSeries) -> some View {
         List(selection: $selectedBook) {
             ForEach(books) { book in
-                bookRow(for: book)
+                BookRowView(book: book, thumbnail: thumbnails[book.id])
+                    .task {
+                        await loadThumbnail(for: book)
+                    }
             }
         }
         .navigationTitle(series.metadata?.title ?? series.name)
         .navigationSplitViewColumnWidth(min: 250, ideal: 350)
     }
     
-    private func bookRow(for book: KomgaBook) -> some View {
-        NavigationLink(value: book) {
-            HStack(spacing: 12) {
-                // Book Thumbnail
-                if let thumbnail = thumbnails[book.id] {
-                    Image(nsImage: thumbnail)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 40, height: 60)
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                } else {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 40, height: 60)
-                        .overlay {
-                            Image(systemName: "book")
-                                .foregroundStyle(.secondary)
-                        }
-                }
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(book.displayTitle)
-                        .font(.headline)
-                    
-                    bookMetadataText(for: book)
-                }
-                
-                Spacer()
-            }
-            .padding(.vertical, 4)
-        }
-        .task {
-            await loadThumbnail(for: book)
-        }
-    }
-    
-    private func bookMetadataText(for book: KomgaBook) -> some View {
-        HStack {
-            if let number = book.number {
-                Text("Issue #\(String(format: "%.0f", number))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            
-            if book.pageCount > 0 {
-                Text("• \(book.pageCount) pages")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            
-            if book.isCompleted {
-                Text("• Read")
-                    .font(.caption)
-                    .foregroundStyle(.green)
-            } else if book.currentPage > 0 {
-                Text("• Page \(book.currentPage)")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
-        }
-    }
-    
-    private var emptySelectionView: some View {
+    private var emptyBooksView: some View {
         VStack(spacing: 20) {
             Image(systemName: "books.vertical")
                 .font(.system(size: 60))
@@ -291,49 +194,27 @@ struct KomgaLibraryView: View {
         }
     }
     
-    // MARK: - Detail View
+    // MARK: - Detail Column
     
-    private var detailView: some View {
-            // Comic Reader
+    private var detailColumn: some View {
+        Group {
             if let selectedBook {
                 KomgaComicReaderView(book: selectedBook, api: api)
             } else {
-                VStack(spacing: 20) {
-                    Image(systemName: "book.pages")
-                        .font(.system(size: 80))
-                        .foregroundStyle(.orange)
-                    
-                    Text("Select a comic to read")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                }
+                emptyReaderView
             }
         }
-        .sheet(isPresented: $showingSettings) {
-            KomgaServerSettingsView(
-                serverURL: $serverURL,
-                username: $username,
-                password: $password,
-                serverName: $serverName,
-                isPresented: $showingSettings,
-                onConnect: {
-                    Task {
-                        await connectToServer()
-                    }
-                }
-            )
-        }
-        .task {
-            if !serverURL.isEmpty && !username.isEmpty {
-                await connectToServer()
-            }
-        }
-        .onChange(of: selectedSeries) { _, newSeries in
-            if let series = newSeries {
-                Task {
-                    await loadBooks(for: series)
-                }
-            }
+    }
+    
+    private var emptyReaderView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "book.pages")
+                .font(.system(size: 80))
+                .foregroundStyle(.orange)
+            
+            Text("Select a comic to read")
+                .font(.title2)
+                .foregroundStyle(.secondary)
         }
     }
     
@@ -413,6 +294,116 @@ struct KomgaLibraryView: View {
             thumbnails[book.id] = thumbnail
         } catch {
             // Silently fail - thumbnail is optional
+        }
+    }
+}
+
+// MARK: - Helper Views
+
+private struct SeriesRowView: View {
+    let series: KomgaSeries
+    let thumbnail: NSImage?
+    
+    var body: some View {
+        NavigationLink(value: series) {
+            HStack(spacing: 12) {
+                // Thumbnail
+                if let thumbnail = thumbnail {
+                    Image(nsImage: thumbnail)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 40, height: 60)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                } else {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 40, height: 60)
+                        .overlay {
+                            Image(systemName: "book.closed")
+                                .foregroundStyle(.secondary)
+                        }
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(series.metadata?.title ?? series.name)
+                        .font(.headline)
+                    
+                    HStack {
+                        if let booksCount = series.booksCount {
+                            Text("\(booksCount) books")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        if let readCount = series.booksReadCount, readCount > 0 {
+                            Text("• \(readCount) read")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+}
+
+private struct BookRowView: View {
+    let book: KomgaBook
+    let thumbnail: NSImage?
+    
+    var body: some View {
+        NavigationLink(value: book) {
+            HStack(spacing: 12) {
+                // Book Thumbnail
+                if let thumbnail = thumbnail {
+                    Image(nsImage: thumbnail)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 40, height: 60)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                } else {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 40, height: 60)
+                        .overlay {
+                            Image(systemName: "book")
+                                .foregroundStyle(.secondary)
+                        }
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(book.displayTitle)
+                        .font(.headline)
+                    
+                    HStack {
+                        if let number = book.number {
+                            Text("Issue #\(String(format: "%.0f", number))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        if book.pageCount > 0 {
+                            Text("• \(book.pageCount) pages")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        if book.isCompleted {
+                            Text("• Read")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                        } else if book.currentPage > 0 {
+                            Text("• Page \(book.currentPage)")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding(.vertical, 4)
         }
     }
 }
