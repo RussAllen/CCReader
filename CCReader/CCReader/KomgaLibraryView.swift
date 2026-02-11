@@ -6,8 +6,10 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct KomgaLibraryView: View {
+    @Environment(\.modelContext) private var modelContext
     @StateObject private var api = KomgaAPI()
     @State private var libraries: [KomgaLibrary] = []
     @State private var selectedLibrary: KomgaLibrary?
@@ -15,6 +17,8 @@ struct KomgaLibraryView: View {
     @State private var selectedSeries: KomgaSeries?
     @State private var books: [KomgaBook] = []
     @State private var selectedBook: KomgaBook?
+    @State private var readingLists: [KomgaReadingList] = []
+    @State private var selectedReadingList: KomgaReadingList?
     @State private var isLoading = false
     @State private var showingSettings = false
     @State private var thumbnails: [String: NSImage] = [:] // Cache for thumbnails
@@ -23,6 +27,7 @@ struct KomgaLibraryView: View {
     @State private var selectedLetter: String? = nil // Start with no letter filter (All Series)
     @State private var searchText: String = ""
     @State private var viewMode: ViewMode = .series // New view mode state
+    @State private var downloadManager: KomgaDownloadManager?
     
     enum ViewMode: String, CaseIterable {
         case series = "Browse Series"
@@ -149,6 +154,119 @@ struct KomgaLibraryView: View {
         return result
     }
     
+    // Filtered reading lists based on selected letter and search text
+    private var filteredReadingLists: [KomgaReadingList] {
+        var result = readingLists
+        
+        // Filter by letter
+        if let letter = selectedLetter {
+            result = result.filter { readingList in
+                let title = readingList.name
+                guard let firstChar = title.first else { return false }
+                let upperChar = String(firstChar).uppercased()
+                
+                if letter == "#" {
+                    // Show items starting with numbers
+                    return upperChar.rangeOfCharacter(from: .decimalDigits) != nil
+                } else if letter == "*" {
+                    // Show items starting with symbols
+                    return upperChar.rangeOfCharacter(from: .letters) == nil && 
+                           upperChar.rangeOfCharacter(from: .decimalDigits) == nil
+                } else {
+                    // Show items starting with the selected letter
+                    return upperChar == letter
+                }
+            }
+        }
+        
+        // Filter by search text
+        if !searchText.isEmpty {
+            result = result.filter { readingList in
+                let title = readingList.name.lowercased()
+                let summary = (readingList.summary ?? "").lowercased()
+                return title.contains(searchText.lowercased()) || 
+                       summary.contains(searchText.lowercased())
+            }
+        }
+        
+        return result
+    }
+    
+    // Available letters for reading lists
+    private var availableReadingListLetters: [String] {
+        var letters = Set<String>()
+        var hasNumbers = false
+        var hasSymbols = false
+        
+        for readingList in readingLists {
+            let title = readingList.name
+            if let firstChar = title.first {
+                let upperChar = String(firstChar).uppercased()
+                
+                if upperChar.rangeOfCharacter(from: .letters) != nil {
+                    letters.insert(upperChar)
+                } else if upperChar.rangeOfCharacter(from: .decimalDigits) != nil {
+                    hasNumbers = true
+                } else {
+                    hasSymbols = true
+                }
+            }
+        }
+        
+        var result: [String] = []
+        
+        // Add # for numbers
+        if hasNumbers {
+            result.append("#")
+        }
+        
+        // Add * for symbols
+        if hasSymbols {
+            result.append("*")
+        }
+        
+        // Add letters A-Z
+        result.append(contentsOf: letters.sorted())
+        
+        return result
+    }
+    
+    // Complete alphabet A-Z for reading lists dropdown
+    private var allReadingListLetterOptions: [String] {
+        var result: [String] = []
+        
+        // Check if we have any numbers or symbols
+        var hasNumbers = false
+        var hasSymbols = false
+        
+        for readingList in readingLists {
+            let title = readingList.name
+            if let firstChar = title.first {
+                let upperChar = String(firstChar).uppercased()
+                
+                if upperChar.rangeOfCharacter(from: .decimalDigits) != nil {
+                    hasNumbers = true
+                } else if upperChar.rangeOfCharacter(from: .letters) == nil {
+                    hasSymbols = true
+                }
+            }
+        }
+        
+        // Add special characters only if they exist
+        if hasNumbers {
+            result.append("#")
+        }
+        if hasSymbols {
+            result.append("*")
+        }
+        
+        // Add full A-Z alphabet
+        result.append(contentsOf: stride(from: UnicodeScalar("A").value, through: UnicodeScalar("Z").value, by: 1)
+            .compactMap { String(UnicodeScalar($0)!) })
+        
+        return result
+    }
+    
     @AppStorage("komgaServerURL") private var serverURL = ""
     @AppStorage("komgaUsername") private var username = ""
     @AppStorage("komgaPassword") private var password = "" // Consider using Keychain instead
@@ -161,6 +279,13 @@ struct KomgaLibraryView: View {
             contentColumn
         } detail: {
             detailColumn
+        }
+        .overlay(alignment: .bottomTrailing) {
+            // Show active downloads notification
+            if let downloadManager = downloadManager, !downloadManager.activeDownloads.isEmpty {
+                DownloadNotificationView(downloadManager: downloadManager)
+                    .padding()
+            }
         }
         .sheet(isPresented: $showingSettings) {
             KomgaServerSettingsView(
@@ -177,6 +302,11 @@ struct KomgaLibraryView: View {
             )
         }
         .task {
+            // Initialize download manager with modelContext
+            if downloadManager == nil {
+                downloadManager = KomgaDownloadManager(api: api, modelContext: modelContext)
+            }
+            
             if !serverURL.isEmpty && !username.isEmpty {
                 await connectToServer()
             }
@@ -188,10 +318,18 @@ struct KomgaLibraryView: View {
                 }
             }
         }
+        .onChange(of: selectedReadingList) { _, newReadingList in
+            if let readingList = newReadingList {
+                Task {
+                    await loadBooksInReadingList(readingList)
+                }
+            }
+        }
         .onChange(of: viewMode) { _, newMode in
             // Clear selections when switching view modes
             selectedSeries = nil
             selectedBook = nil
+            selectedReadingList = nil
             selectedLetter = nil
             searchText = ""
             
@@ -200,6 +338,8 @@ struct KomgaLibraryView: View {
                     await loadRecentBooks()
                 } else if newMode == .series {
                     await loadSeries()
+                } else if newMode == .readingLists {
+                    await loadReadingLists()
                 }
             }
         }
@@ -255,7 +395,7 @@ struct KomgaLibraryView: View {
     }
     
     private var connectedSidebarView: some View {
-        List(selection: viewMode == .series ? $selectedSeries : .constant(nil)) {
+        List {
             // View Mode Picker
             viewModeSection
             
@@ -278,6 +418,11 @@ struct KomgaLibraryView: View {
                 recentBooksSection
                 
             case .readingLists:
+                // Search bar and alphabet filter for reading lists
+                if !readingLists.isEmpty {
+                    readingListSearchSection
+                    readingListAlphabetFilterSection
+                }
                 readingListsSection
             }
         }
@@ -364,6 +509,69 @@ struct KomgaLibraryView: View {
                 Spacer()
                 if selectedLetter != nil || !searchText.isEmpty {
                     Text("\(filteredSeries.count) of \(series.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+    
+    private var readingListSearchSection: some View {
+        Section {
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                
+                TextField("Search reading lists...", text: $searchText)
+                    .textFieldStyle(.plain)
+                
+                if !searchText.isEmpty {
+                    Button(action: { 
+                        searchText = ""
+                        selectedLetter = nil
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+    }
+    
+    private var readingListAlphabetFilterSection: some View {
+        Section {
+            Picker("Filter by Letter", selection: $selectedLetter) {
+                Text("All Reading Lists").tag(nil as String?)
+                
+                ForEach(allReadingListLetterOptions, id: \.self) { letter in
+                    if letter == "#" {
+                        Text("# (Numbers)").tag(letter as String?)
+                    } else if letter == "*" {
+                        Text("* (Symbols)").tag(letter as String?)
+                    } else {
+                        // Show count if reading lists exist for this letter
+                        let count = readingLists.filter { rl in
+                            let title = rl.name
+                            return title.uppercased().hasPrefix(letter)
+                        }.count
+                        
+                        if count > 0 {
+                            Text("\(letter) (\(count))").tag(letter as String?)
+                        } else {
+                            Text(letter).tag(letter as String?)
+                        }
+                    }
+                }
+            }
+            .pickerStyle(.menu)
+        } header: {
+            HStack {
+                Text("Filter")
+                Spacer()
+                if selectedLetter != nil || !searchText.isEmpty {
+                    Text("\(filteredReadingLists.count) of \(readingLists.count)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -468,13 +676,32 @@ struct KomgaLibraryView: View {
                     Button(action: {
                         selectedBook = book
                     }) {
-                        BookRowView(book: book, thumbnail: thumbnails[book.id], showSeriesName: true)
-                            .task {
-                                await loadThumbnail(for: book)
-                            }
+                        BookRowView(
+                            book: book, 
+                            thumbnail: thumbnails[book.id], 
+                            showSeriesName: true,
+                            downloadManager: downloadManager
+                        )
+                        .task {
+                            await loadThumbnail(for: book)
+                        }
                     }
                     .buttonStyle(.plain)
                     .background(selectedBook?.id == book.id ? Color.accentColor.opacity(0.1) : Color.clear)
+                    .contextMenu {
+                        Button {
+                            Task {
+                                await downloadBook(book)
+                            }
+                        } label: {
+                            Label("Add to Local Library", systemImage: "arrow.down.circle")
+                        }
+                        .disabled(downloadManager?.isDownloading(book.id) ?? false)
+                        
+                        if downloadManager?.isDownloading(book.id) ?? false {
+                            Label("Downloading...", systemImage: "arrow.down.circle.dotted")
+                        }
+                    }
                 }
             }
         }
@@ -482,27 +709,70 @@ struct KomgaLibraryView: View {
     
     private var readingListsSection: some View {
         Section("Reading Lists") {
-            VStack(spacing: 12) {
-                Image(systemName: "list.bullet")
-                    .font(.system(size: 40))
-                    .foregroundStyle(.secondary)
-                
-                Text("Reading Lists")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-                
-                Text("Coming Soon")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                
-                Text("Reading lists will allow you to create custom collections of books from different series.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+            if isLoading {
+                VStack(spacing: 8) {
+                    ProgressView()
+                    Text("Loading reading lists...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding()
+            } else if filteredReadingLists.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "list.bullet")
+                        .font(.system(size: 40))
+                        .foregroundStyle(.secondary)
+                    
+                    if selectedLetter != nil {
+                        Text("No reading lists starting with '\(selectedLetter!)'")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                        
+                        Button("Show All") {
+                            selectedLetter = nil
+                        }
+                        .buttonStyle(.bordered)
+                    } else if !searchText.isEmpty {
+                        Text("No reading lists matching '\(searchText)'")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                        
+                        Button("Clear Search") {
+                            searchText = ""
+                        }
+                        .buttonStyle(.bordered)
+                    } else if readingLists.isEmpty {
+                        Text("No Reading Lists")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                        
+                        Text("Reading lists haven't been created on your Komga server yet.")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+            } else {
+                ForEach(filteredReadingLists) { readingList in
+                    Button(action: {
+                        selectedReadingList = readingList
+                    }) {
+                        ReadingListRowView(
+                            readingList: readingList,
+                            thumbnail: thumbnails[readingList.id]
+                        )
+                        .task {
+                            await loadThumbnail(for: readingList)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .background(selectedReadingList?.id == readingList.id ? Color.accentColor.opacity(0.1) : Color.clear)
+                }
             }
-            .frame(maxWidth: .infinity)
-            .padding()
         }
     }
     
@@ -542,8 +812,15 @@ struct KomgaLibraryView: View {
                 } else {
                     emptyBooksView
                 }
+            } else if viewMode == .readingLists {
+                // Show books for selected reading list
+                if let selectedReadingList {
+                    readingListBooksView(for: selectedReadingList)
+                } else {
+                    emptyReadingListView
+                }
             } else {
-                // For recent books and reading lists, hide the middle column
+                // For recent books, hide the middle column
                 EmptyView()
             }
         }
@@ -555,6 +832,21 @@ struct KomgaLibraryView: View {
         }
         .navigationTitle(series.metadata?.title ?? series.name)
         .navigationSplitViewColumnWidth(min: 250, ideal: 350)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                if let selectedBook = selectedBook {
+                    Button {
+                        Task {
+                            await downloadBook(selectedBook)
+                        }
+                    } label: {
+                        Label("Add to Local Library", systemImage: "arrow.down.circle")
+                    }
+                    .disabled(downloadManager?.isDownloading(selectedBook.id) ?? false)
+                    .help("Download this comic to your local library")
+                }
+            }
+        }
     }
     
     @ViewBuilder
@@ -575,10 +867,28 @@ struct KomgaLibraryView: View {
     
     private var booksList: some View {
         ForEach(books) { book in
-            BookRowView(book: book, thumbnail: thumbnails[book.id])
-                .task {
-                    await loadThumbnail(for: book)
+            BookRowView(
+                book: book, 
+                thumbnail: thumbnails[book.id],
+                downloadManager: downloadManager
+            )
+            .task {
+                await loadThumbnail(for: book)
+            }
+            .contextMenu {
+                Button {
+                    Task {
+                        await downloadBook(book)
+                    }
+                } label: {
+                    Label("Add to Local Library", systemImage: "arrow.down.circle")
                 }
+                .disabled(downloadManager?.isDownloading(book.id) ?? false)
+                
+                if downloadManager?.isDownloading(book.id) ?? false {
+                    Label("Downloading...", systemImage: "arrow.down.circle.dotted")
+                }
+            }
         }
     }
     
@@ -623,6 +933,83 @@ struct KomgaLibraryView: View {
                 .font(.title2)
                 .foregroundStyle(.secondary)
         }
+    }
+    
+    private var emptyReadingListView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "list.bullet")
+                .font(.system(size: 60))
+                .foregroundStyle(.secondary)
+            
+            Text("Select a reading list")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+        }
+    }
+    
+    private func readingListBooksView(for readingList: KomgaReadingList) -> some View {
+        List(selection: $selectedBook) {
+            readingListBooksContent(for: readingList)
+        }
+        .navigationTitle(readingList.name)
+        .navigationSplitViewColumnWidth(min: 250, ideal: 350)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                if let selectedBook = selectedBook {
+                    Button {
+                        Task {
+                            await downloadBook(selectedBook)
+                        }
+                    } label: {
+                        Label("Add to Local Library", systemImage: "arrow.down.circle")
+                    }
+                    .disabled(downloadManager?.isDownloading(selectedBook.id) ?? false)
+                    .help("Download this comic to your local library")
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func readingListBooksContent(for readingList: KomgaReadingList) -> some View {
+        if books.isEmpty && !isLoading {
+            emptyReadingListBooksState(for: readingList)
+        } else if isLoading {
+            loadingBooksState
+        } else {
+            booksList
+        }
+    }
+    
+    private func emptyReadingListBooksState(for readingList: KomgaReadingList) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "book")
+                .font(.system(size: 40))
+                .foregroundStyle(.secondary)
+            
+            Text("No books in this reading list")
+                .font(.headline)
+                .foregroundStyle(.secondary)
+            
+            Text(readingList.name)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+            
+            if readingList.bookCount > 0 {
+                Text("Expected \(readingList.bookCount) books from server")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+            
+            Button("Reload Books") {
+                Task {
+                    await loadBooksInReadingList(readingList)
+                }
+            }
+            .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
     }
     
     // MARK: - Detail Column
@@ -934,9 +1321,193 @@ struct KomgaLibraryView: View {
             // Silently fail - thumbnail is optional
         }
     }
+    
+    private func downloadBook(_ book: KomgaBook) async {
+        guard let downloadManager = downloadManager else {
+            print("❌ Download manager not initialized")
+            return
+        }
+        
+        do {
+            try await downloadManager.downloadBook(book)
+            print("✅ Successfully downloaded and added '\(book.displayTitle)' to local library")
+        } catch {
+            print("❌ Failed to download book: \(error.localizedDescription)")
+            errorMessage = "Failed to download '\(book.displayTitle)': \(error.localizedDescription)"
+        }
+    }
+    
+    // MARK: - Reading Lists Loading
+    
+    private func loadReadingLists() async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        
+        do {
+            var allReadingLists: [KomgaReadingList] = []
+            var currentPage = 0
+            var totalPages = 1
+            
+            // Load all pages
+            while currentPage < totalPages {
+                print("📚 Loading reading lists page \(currentPage + 1)...")
+                
+                let response = try await api.fetchReadingLists(
+                    libraryId: selectedLibrary?.id,
+                    page: currentPage,
+                    size: 500
+                )
+                
+                allReadingLists.append(contentsOf: response.content)
+                
+                // Update total pages from response
+                if let pages = response.totalPages {
+                    totalPages = pages
+                }
+                
+                currentPage += 1
+                
+                // Safety check
+                if currentPage > 100 {
+                    print("⚠️ Too many pages, stopping at page 100")
+                    break
+                }
+            }
+            
+            readingLists = allReadingLists
+            
+            debugInfo = "Loaded \(readingLists.count) reading lists"
+            print("✅ Loaded \(readingLists.count) reading lists (across \(currentPage) page(s))")
+            
+            if readingLists.isEmpty {
+                errorMessage = "No reading lists found"
+            }
+        } catch {
+            errorMessage = "Failed to load reading lists: \(error.localizedDescription)"
+            print("❌ Failed to load reading lists: \(error)")
+        }
+    }
+    
+    private func loadBooksInReadingList(_ readingList: KomgaReadingList) async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        
+        do {
+            print("📖 Loading books for reading list: \(readingList.name) (ID: \(readingList.id))")
+            print("   Reading list reports \(readingList.bookCount) books")
+            
+            var allBooks: [KomgaBook] = []
+            var currentPage = 0
+            var totalPages = 1
+            
+            // Load all pages
+            while currentPage < totalPages {
+                let response = try await api.fetchBooksInReadingList(
+                    readingListId: readingList.id,
+                    page: currentPage,
+                    size: 500
+                )
+                allBooks.append(contentsOf: response.content)
+                
+                // Update total pages from response
+                if let pages = response.totalPages {
+                    totalPages = pages
+                }
+                
+                currentPage += 1
+                
+                // Safety check
+                if currentPage > 50 {
+                    print("⚠️ Too many book pages, stopping at page 50")
+                    break
+                }
+            }
+            
+            books = allBooks
+            
+            print("✅ API returned \(books.count) books from reading list '\(readingList.name)' (across \(currentPage) page(s))")
+            
+            if books.isEmpty {
+                errorMessage = "No books found in this reading list"
+                print("⚠️ Reading list reports \(readingList.bookCount) books but none were loaded")
+            } else {
+                debugInfo = "Loaded \(books.count) books"
+                // Print first few book titles for verification
+                let titles = books.prefix(3).map { $0.displayTitle }.joined(separator: ", ")
+                print("   First books: \(titles)")
+            }
+        } catch {
+            errorMessage = "Failed to load books: \(error.localizedDescription)"
+            print("❌ Failed to load books: \(error)")
+        }
+    }
+    
+    private func loadThumbnail(for readingList: KomgaReadingList) async {
+        guard thumbnails[readingList.id] == nil else { return }
+        
+        do {
+            let thumbnail = try await api.fetchReadingListThumbnail(readingListId: readingList.id)
+            thumbnails[readingList.id] = thumbnail
+        } catch {
+            // Silently fail - thumbnail is optional
+        }
+    }
 }
 
 // MARK: - Helper Views
+
+private struct ReadingListRowView: View {
+    let readingList: KomgaReadingList
+    let thumbnail: NSImage?
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Thumbnail
+            if let thumbnail = thumbnail {
+                Image(nsImage: thumbnail)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 40, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+            } else {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: 40, height: 60)
+                    .overlay {
+                        Image(systemName: "list.bullet")
+                            .foregroundStyle(.secondary)
+                    }
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(readingList.name)
+                    .font(.headline)
+                
+                HStack {
+                    Text("\(readingList.bookCount) books")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    
+                    if readingList.ordered {
+                        Text("• Ordered")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
+                if let summary = readingList.summary, !summary.isEmpty {
+                    Text(summary)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
 
 private struct SeriesRowView: View {
     let series: KomgaSeries
@@ -990,6 +1561,7 @@ private struct BookRowView: View {
     let book: KomgaBook
     let thumbnail: NSImage?
     var showSeriesName: Bool = false
+    var downloadManager: KomgaDownloadManager?
     
     var body: some View {
         NavigationLink(value: book) {
@@ -997,8 +1569,33 @@ private struct BookRowView: View {
                 bookThumbnailView
                 bookDetailsView
                 Spacer()
+                
+                // Show download status if downloading
+                if let progress = downloadManager?.downloadProgress(for: book.id) {
+                    downloadStatusView(progress: progress)
+                }
             }
             .padding(.vertical, 4)
+        }
+    }
+    
+    private func downloadStatusView(progress: DownloadProgress) -> some View {
+        HStack(spacing: 4) {
+            if progress.status.isInProgress {
+                ProgressView()
+                    .controlSize(.small)
+                Text(progress.status.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if case .completed = progress.status {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.caption)
+            } else if case .failed = progress.status {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .font(.caption)
+            }
         }
     }
     
@@ -1066,6 +1663,136 @@ private struct BookRowView: View {
             Text("• Page \(book.currentPage)")
                 .font(.caption)
                 .foregroundStyle(.orange)
+        }
+    }
+}
+
+// MARK: - Download Notification View
+
+private struct DownloadNotificationView: View {
+    @ObservedObject var downloadManager: KomgaDownloadManager
+    @State private var isExpanded = false
+    
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            if isExpanded {
+                expandedView
+            } else {
+                collapsedView
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.ultraThinMaterial)
+                .shadow(radius: 8)
+        )
+        .frame(maxWidth: isExpanded ? 300 : nil)
+    }
+    
+    private var collapsedView: some View {
+        Button {
+            withAnimation(.spring(response: 0.3)) {
+                isExpanded.toggle()
+            }
+        } label: {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                
+                Text("\(downloadManager.activeDownloads.count) download\(downloadManager.activeDownloads.count == 1 ? "" : "s")")
+                    .font(.caption)
+                
+                Image(systemName: "chevron.up")
+                    .font(.caption2)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private var expandedView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            HStack {
+                Text("Downloads")
+                    .font(.headline)
+                
+                Spacer()
+                
+                Button {
+                    withAnimation(.spring(response: 0.3)) {
+                        isExpanded = false
+                    }
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            
+            Divider()
+            
+            // Download items
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(downloadManager.activeDownloads.values)) { progress in
+                        DownloadItemView(progress: progress)
+                    }
+                }
+                .padding(12)
+            }
+            .frame(maxHeight: 200)
+        }
+    }
+}
+
+private struct DownloadItemView: View {
+    @ObservedObject var progress: DownloadProgress
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(progress.bookTitle)
+                .font(.caption)
+                .lineLimit(1)
+            
+            HStack(spacing: 4) {
+                statusIcon
+                
+                Text(progress.status.description)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                
+                Spacer()
+                
+                if progress.status.isInProgress {
+                    ProgressView()
+                        .controlSize(.mini)
+                }
+            }
+        }
+        .padding(8)
+        .background(Color.primary.opacity(0.05))
+        .cornerRadius(6)
+    }
+    
+    @ViewBuilder
+    private var statusIcon: some View {
+        switch progress.status {
+        case .queued, .downloading, .saving, .addingToLibrary:
+            Image(systemName: "arrow.down.circle")
+                .foregroundStyle(.blue)
+                .font(.caption2)
+        case .completed:
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .font(.caption2)
+        case .failed:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .font(.caption2)
         }
     }
 }

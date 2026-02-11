@@ -153,6 +153,23 @@ struct KomgaPage: Codable {
     let mediaType: String?
 }
 
+// MARK: - Reading Lists
+
+struct KomgaReadingList: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let summary: String?
+    let ordered: Bool
+    let bookIds: [String]
+    let createdDate: String?
+    let lastModifiedDate: String?
+    let filtered: Bool?
+    
+    var bookCount: Int {
+        bookIds.count
+    }
+}
+
 // MARK: - API Response Wrappers
 
 struct KomgaPageResponse<T: Codable>: Codable {

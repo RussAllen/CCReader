@@ -6,8 +6,21 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		BA90E16E2F3CF0DB00FCCB38 /* KomgaDownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA90E16D2F3CF0DB00FCCB38 /* KomgaDownloadManager.swift */; };
+		BA90E1702F3CF17800FCCB38 /* DOWNLOAD_FEATURE_SUMMARY.md in Resources */ = {isa = PBXBuildFile; fileRef = BA90E16F2F3CF17800FCCB38 /* DOWNLOAD_FEATURE_SUMMARY.md */; };
+		BA90E1722F3CF28100FCCB38 /* READING_LISTS_FEATURE.md in Resources */ = {isa = PBXBuildFile; fileRef = BA90E1712F3CF28100FCCB38 /* READING_LISTS_FEATURE.md */; };
+		BA90E1742F3CF2A100FCCB38 /* READING_LISTS_GUIDE.md in Resources */ = {isa = PBXBuildFile; fileRef = BA90E1732F3CF2A100FCCB38 /* READING_LISTS_GUIDE.md */; };
+		BA90E1762F3CF44400FCCB38 /* READING_LISTS_FILTER_FEATURE.md in Resources */ = {isa = PBXBuildFile; fileRef = BA90E1752F3CF44400FCCB38 /* READING_LISTS_FILTER_FEATURE.md */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		BA553BDB2F33C95B004A304D /* CCReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CCReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BA90E16D2F3CF0DB00FCCB38 /* KomgaDownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KomgaDownloadManager.swift; sourceTree = "<group>"; };
+		BA90E16F2F3CF17800FCCB38 /* DOWNLOAD_FEATURE_SUMMARY.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = DOWNLOAD_FEATURE_SUMMARY.md; sourceTree = "<group>"; };
+		BA90E1712F3CF28100FCCB38 /* READING_LISTS_FEATURE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = READING_LISTS_FEATURE.md; sourceTree = "<group>"; };
+		BA90E1732F3CF2A100FCCB38 /* READING_LISTS_GUIDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = READING_LISTS_GUIDE.md; sourceTree = "<group>"; };
+		BA90E1752F3CF44400FCCB38 /* READING_LISTS_FILTER_FEATURE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = READING_LISTS_FILTER_FEATURE.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -34,6 +47,11 @@
 			children = (
 				BA553BDD2F33C95B004A304D /* CCReader */,
 				BA553BDC2F33C95B004A304D /* Products */,
+				BA90E16D2F3CF0DB00FCCB38 /* KomgaDownloadManager.swift */,
+				BA90E16F2F3CF17800FCCB38 /* DOWNLOAD_FEATURE_SUMMARY.md */,
+				BA90E1712F3CF28100FCCB38 /* READING_LISTS_FEATURE.md */,
+				BA90E1732F3CF2A100FCCB38 /* READING_LISTS_GUIDE.md */,
+				BA90E1752F3CF44400FCCB38 /* READING_LISTS_FILTER_FEATURE.md */,
 			);
 			sourceTree = "<group>";
 		};
@@ -109,6 +127,10 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BA90E1702F3CF17800FCCB38 /* DOWNLOAD_FEATURE_SUMMARY.md in Resources */,
+				BA90E1742F3CF2A100FCCB38 /* READING_LISTS_GUIDE.md in Resources */,
+				BA90E1722F3CF28100FCCB38 /* READING_LISTS_FEATURE.md in Resources */,
+				BA90E1762F3CF44400FCCB38 /* READING_LISTS_FILTER_FEATURE.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -119,6 +141,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BA90E16E2F3CF0DB00FCCB38 /* KomgaDownloadManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
