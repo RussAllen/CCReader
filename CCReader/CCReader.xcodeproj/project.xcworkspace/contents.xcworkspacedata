@@ -4,4 +4,25 @@
    <FileRef
       location = "self:">
    </FileRef>
+   <FileRef
+      location = "group:KomgaModels.swift">
+   </FileRef>
+   <FileRef
+      location = "group:KomgaAPI.swift">
+   </FileRef>
+   <FileRef
+      location = "group:KomgaBookReader.swift">
+   </FileRef>
+   <FileRef
+      location = "group:KomgaLibraryView.swift">
+   </FileRef>
+   <FileRef
+      location = "group:KomgaServerSettingsView.swift">
+   </FileRef>
+   <FileRef
+      location = "group:KomgaComicReaderView.swift">
+   </FileRef>
+   <FileRef
+      location = "group:KOMGA_README.md">
+   </FileRef>
 </Workspace>

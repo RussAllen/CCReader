@@ -17,8 +17,45 @@ struct ContentView: View {
     @State private var showingDeleteAlert = false
     @State private var comicsToDelete: IndexSet?
     @State private var comicToDelete: ComicBook?
+    @State private var selectedSource: LibrarySource = .local
+    
+    enum LibrarySource: String, CaseIterable {
+        case local = "Local Library"
+        case komga = "Komga Server"
+        
+        var icon: String {
+            switch self {
+            case .local: return "folder"
+            case .komga: return "network"
+            }
+        }
+    }
 
     var body: some View {
+        Group {
+            switch selectedSource {
+            case .local:
+                localLibraryView
+            case .komga:
+                // Komga view - make sure KomgaLibraryView.swift is added to your Xcode target
+                KomgaLibraryView()
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Picker("Library Source", selection: $selectedSource) {
+                    ForEach(LibrarySource.allCases, id: \.self) { source in
+                        Label(source.rawValue, systemImage: source.icon)
+                            .tag(source)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 280)
+            }
+        }
+    }
+    
+    private var localLibraryView: some View {
         NavigationSplitView {
             List(selection: $selectedComicBook) {
                 ForEach(comicBooks) { comic in
