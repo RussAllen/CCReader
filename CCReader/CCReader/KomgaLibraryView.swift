@@ -22,6 +22,21 @@ struct KomgaLibraryView: View {
     @State private var debugInfo: String = ""
     @State private var selectedLetter: String? = nil // Start with no letter filter (All Series)
     @State private var searchText: String = ""
+    @State private var viewMode: ViewMode = .series // New view mode state
+    
+    enum ViewMode: String, CaseIterable {
+        case series = "Browse Series"
+        case recentBooks = "Recently Added"
+        case readingLists = "Reading Lists"
+        
+        var icon: String {
+            switch self {
+            case .series: return "books.vertical"
+            case .recentBooks: return "clock"
+            case .readingLists: return "list.bullet"
+            }
+        }
+    }
     
     // All available letters based on series
     private var availableLetters: [String] {
@@ -173,6 +188,21 @@ struct KomgaLibraryView: View {
                 }
             }
         }
+        .onChange(of: viewMode) { _, newMode in
+            // Clear selections when switching view modes
+            selectedSeries = nil
+            selectedBook = nil
+            selectedLetter = nil
+            searchText = ""
+            
+            Task {
+                if newMode == .recentBooks {
+                    await loadRecentBooks()
+                } else if newMode == .series {
+                    await loadSeries()
+                }
+            }
+        }
     }
     
     // MARK: - Sidebar
@@ -225,31 +255,56 @@ struct KomgaLibraryView: View {
     }
     
     private var connectedSidebarView: some View {
-        List(selection: $selectedSeries) {
-            if libraries.count > 1 {
+        List(selection: viewMode == .series ? $selectedSeries : .constant(nil)) {
+            // View Mode Picker
+            viewModeSection
+            
+            // Library picker (only for series view)
+            if viewMode == .series && libraries.count > 1 {
                 librarySection
             }
             
-            // Search bar and alphabet filter
-            if !series.isEmpty {
-                searchSection
-                alphabetFilterSection
+            // Content based on view mode
+            switch viewMode {
+            case .series:
+                // Search bar and alphabet filter
+                if !series.isEmpty {
+                    searchSection
+                    alphabetFilterSection
+                }
+                seriesSection
+                
+            case .recentBooks:
+                recentBooksSection
+                
+            case .readingLists:
+                readingListsSection
             }
-            
-            seriesSection
         }
         .navigationTitle(serverName)
     }
     
     private var librarySection: some View {
-        Section("Libraries") {
-            Picker("Library", selection: $selectedLibrary) {
-                Text("All Libraries").tag(nil as KomgaLibrary?)
+        Section("Library") {
+            Picker("Select Library", selection: $selectedLibrary) {
+                Text("Choose a library...").tag(nil as KomgaLibrary?)
                 ForEach(libraries) { library in
                     Text(library.name).tag(library as KomgaLibrary?)
                 }
             }
-            .labelsHidden()
+            .pickerStyle(.menu)
+        }
+    }
+    
+    private var viewModeSection: some View {
+        Section {
+            Picker("View", selection: $viewMode) {
+                ForEach(ViewMode.allCases, id: \.self) { mode in
+                    Label(mode.rawValue, systemImage: mode.icon)
+                        .tag(mode)
+                }
+            }
+            .pickerStyle(.menu)
         }
     }
     
@@ -342,20 +397,22 @@ struct KomgaLibraryView: View {
                             selectedLetter = nil
                         }
                         .buttonStyle(.bordered)
+                    } else if selectedLibrary == nil {
+                        Text("Choose a library to view series")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                        
+                        Text("Select a library from the dropdown above")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
                     } else {
                         Text("No series found")
                             .font(.headline)
                             .foregroundStyle(.secondary)
                         
-                        if let library = selectedLibrary {
-                            Text("Library: \(library.name)")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        } else {
-                            Text("Try selecting a different library")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
+                        Text("Library: \(selectedLibrary!.name)")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
                     }
                     
                     if let error = errorMessage {
@@ -375,6 +432,77 @@ struct KomgaLibraryView: View {
                         }
                 }
             }
+        }
+    }
+    
+    private var recentBooksSection: some View {
+        Section("Recently Added Books (Last 7 Days)") {
+            if isLoading {
+                VStack(spacing: 8) {
+                    ProgressView()
+                    Text("Loading recent books...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding()
+            } else if books.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "clock")
+                        .font(.system(size: 40))
+                        .foregroundStyle(.secondary)
+                    
+                    Text("No books added recently")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                    
+                    Text("No books have been added to Komga in the last 7 days")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+            } else {
+                ForEach(books) { book in
+                    Button(action: {
+                        selectedBook = book
+                    }) {
+                        BookRowView(book: book, thumbnail: thumbnails[book.id], showSeriesName: true)
+                            .task {
+                                await loadThumbnail(for: book)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .background(selectedBook?.id == book.id ? Color.accentColor.opacity(0.1) : Color.clear)
+                }
+            }
+        }
+    }
+    
+    private var readingListsSection: some View {
+        Section("Reading Lists") {
+            VStack(spacing: 12) {
+                Image(systemName: "list.bullet")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.secondary)
+                
+                Text("Reading Lists")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                
+                Text("Coming Soon")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                
+                Text("Reading lists will allow you to create custom collections of books from different series.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
         }
     }
     
@@ -407,59 +535,82 @@ struct KomgaLibraryView: View {
     
     private var contentColumn: some View {
         Group {
-            if let selectedSeries {
-                booksListView(for: selectedSeries)
+            if viewMode == .series {
+                // Show books for selected series
+                if let selectedSeries {
+                    booksListView(for: selectedSeries)
+                } else {
+                    emptyBooksView
+                }
             } else {
-                emptyBooksView
+                // For recent books and reading lists, hide the middle column
+                EmptyView()
             }
         }
     }
     
     private func booksListView(for series: KomgaSeries) -> some View {
         List(selection: $selectedBook) {
-            if books.isEmpty && !isLoading {
-                VStack(spacing: 12) {
-                    Image(systemName: "book")
-                        .font(.system(size: 40))
-                        .foregroundStyle(.secondary)
-                    
-                    Text("No books found in this series")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                    
-                    Text(series.metadata?.title ?? series.name)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                    
-                    if let count = series.booksCount, count > 0 {
-                        Text("Expected \(count) books from server")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    }
-                    
-                    Button("Reload Books") {
-                        Task {
-                            await loadBooks(for: series)
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding()
-            } else if isLoading {
-                ProgressView("Loading books...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ForEach(books) { book in
-                    BookRowView(book: book, thumbnail: thumbnails[book.id])
-                        .task {
-                            await loadThumbnail(for: book)
-                        }
-                }
-            }
+            booksListContent(for: series)
         }
         .navigationTitle(series.metadata?.title ?? series.name)
         .navigationSplitViewColumnWidth(min: 250, ideal: 350)
+    }
+    
+    @ViewBuilder
+    private func booksListContent(for series: KomgaSeries) -> some View {
+        if books.isEmpty && !isLoading {
+            emptyBooksState(for: series)
+        } else if isLoading {
+            loadingBooksState
+        } else {
+            booksList
+        }
+    }
+    
+    private var loadingBooksState: some View {
+        ProgressView("Loading books...")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    private var booksList: some View {
+        ForEach(books) { book in
+            BookRowView(book: book, thumbnail: thumbnails[book.id])
+                .task {
+                    await loadThumbnail(for: book)
+                }
+        }
+    }
+    
+    private func emptyBooksState(for series: KomgaSeries) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "book")
+                .font(.system(size: 40))
+                .foregroundStyle(.secondary)
+            
+            Text("No books found in this series")
+                .font(.headline)
+                .foregroundStyle(.secondary)
+            
+            Text(series.metadata?.title ?? series.name)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+            
+            if let count = series.booksCount, count > 0 {
+                Text("Expected \(count) books from server")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+            
+            Button("Reload Books") {
+                Task {
+                    await loadBooks(for: series)
+                }
+            }
+            .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
     }
     
     private var emptyBooksView: some View {
@@ -539,6 +690,12 @@ struct KomgaLibraryView: View {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
+        
+        // Don't load series if no library is selected
+        guard selectedLibrary != nil else {
+            series = []
+            return
+        }
         
         do {
             var allSeries: [KomgaSeries] = []
@@ -637,6 +794,125 @@ struct KomgaLibraryView: View {
         }
     }
     
+    private func loadRecentBooks() async {
+        isLoading = true
+        errorMessage = nil
+        books = []
+        defer { isLoading = false }
+        
+        do {
+            print("📚 Loading recently added books (last 7 days)...")
+            
+            // Calculate date 7 days ago
+            let calendar = Calendar.current
+            let oneWeekAgo = calendar.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+            print("   Looking for books added after: \(oneWeekAgo)")
+            
+            let dateFormatter = ISO8601DateFormatter()
+            dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            
+            // Fetch recent books across all libraries or selected library
+            var allBooks: [KomgaBook] = []
+            var currentPage = 0
+            let maxPages = 20 // Increased to ensure we get all recent content
+            
+            while currentPage < maxPages {
+                let response = try await api.fetchSeries(
+                    libraryId: selectedLibrary?.id,
+                    page: currentPage,
+                    size: 100
+                )
+                
+                guard !response.content.isEmpty else {
+                    print("   No more series to check")
+                    break
+                }
+                
+                // For each series, get ALL books (not just first 20)
+                for series in response.content {
+                    let booksResponse = try await api.fetchBooks(seriesId: series.id, page: 0, size: 1000)
+                    
+                    // Filter books added in the last week
+                    let recentBooks = booksResponse.content.filter { book in
+                        guard let created = book.created else { 
+                            print("   ⚠️ Book '\(book.displayTitle)' has no creation date")
+                            return false 
+                        }
+                        
+                        // Try parsing with different formatters
+                        var bookDate: Date?
+                        
+                        // Try ISO8601 with fractional seconds
+                        if bookDate == nil {
+                            bookDate = dateFormatter.date(from: created)
+                        }
+                        
+                        // Try ISO8601 without fractional seconds
+                        if bookDate == nil {
+                            let simpleFormatter = ISO8601DateFormatter()
+                            bookDate = simpleFormatter.date(from: created)
+                        }
+                        
+                        // Try with custom format
+                        if bookDate == nil {
+                            let fallbackFormatter = DateFormatter()
+                            fallbackFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
+                            fallbackFormatter.locale = Locale(identifier: "en_US_POSIX")
+                            bookDate = fallbackFormatter.date(from: created)
+                        }
+                        
+                        // Another fallback without milliseconds
+                        if bookDate == nil {
+                            let fallbackFormatter = DateFormatter()
+                            fallbackFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
+                            fallbackFormatter.locale = Locale(identifier: "en_US_POSIX")
+                            bookDate = fallbackFormatter.date(from: created)
+                        }
+                        
+                        guard let bookDate = bookDate else {
+                            print("   ⚠️ Could not parse date for '\(book.displayTitle)': \(created)")
+                            return false
+                        }
+                        
+                        let isRecent = bookDate >= oneWeekAgo
+                        if isRecent {
+                            print("   ✅ Found recent book: '\(book.displayTitle)' from \(bookDate)")
+                        }
+                        return isRecent
+                    }
+                    
+                    allBooks.append(contentsOf: recentBooks)
+                }
+                
+                currentPage += 1
+                
+                // Check if this was the last page
+                if response.content.count < 100 {
+                    break
+                }
+            }
+            
+            // Sort all books by created date (newest first)
+            books = allBooks.sorted { book1, book2 in
+                guard let date1 = book1.created, let date2 = book2.created else {
+                    return false
+                }
+                return date1 > date2
+            }.prefix(200).map { $0 } // Increased to 200 to show more books
+            
+            print("✅ Loaded \(books.count) recent books from last 7 days")
+            debugInfo = "Showing \(books.count) recent books"
+            
+            if books.isEmpty {
+                errorMessage = "No books added in the last 7 days"
+            }
+            
+        } catch {
+            errorMessage = "Failed to load recent books: \(error.localizedDescription)"
+            print("❌ Failed to load recent books: \(error)")
+        }
+    }
+    
     private func loadThumbnail(for series: KomgaSeries) async {
         guard thumbnails[series.id] == nil else { return }
         
@@ -713,59 +989,83 @@ private struct SeriesRowView: View {
 private struct BookRowView: View {
     let book: KomgaBook
     let thumbnail: NSImage?
+    var showSeriesName: Bool = false
     
     var body: some View {
         NavigationLink(value: book) {
             HStack(spacing: 12) {
-                // Book Thumbnail
-                if let thumbnail = thumbnail {
-                    Image(nsImage: thumbnail)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 40, height: 60)
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                } else {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 40, height: 60)
-                        .overlay {
-                            Image(systemName: "book")
-                                .foregroundStyle(.secondary)
-                        }
-                }
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(book.displayTitle)
-                        .font(.headline)
-                    
-                    HStack {
-                        if let number = book.number {
-                            Text("Issue #\(String(format: "%.0f", number))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        
-                        if book.pageCount > 0 {
-                            Text("• \(book.pageCount) pages")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        
-                        if book.isCompleted {
-                            Text("• Read")
-                                .font(.caption)
-                                .foregroundStyle(.green)
-                        } else if book.currentPage > 0 {
-                            Text("• Page \(book.currentPage)")
-                                .font(.caption)
-                                .foregroundStyle(.orange)
-                        }
-                    }
-                }
-                
+                bookThumbnailView
+                bookDetailsView
                 Spacer()
             }
             .padding(.vertical, 4)
+        }
+    }
+    
+    private var bookThumbnailView: some View {
+        Group {
+            if let thumbnail = thumbnail {
+                Image(nsImage: thumbnail)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 40, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+            } else {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: 40, height: 60)
+                    .overlay {
+                        Image(systemName: "book")
+                            .foregroundStyle(.secondary)
+                    }
+            }
+        }
+    }
+    
+    private var bookDetailsView: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if showSeriesName, let seriesTitle = book.seriesTitle {
+                Text(seriesTitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Text(book.displayTitle)
+                .font(.headline)
+            
+            bookMetadataView
+        }
+    }
+    
+    @ViewBuilder
+    private var bookMetadataView: some View {
+        HStack {
+            if let number = book.number {
+                Text("Issue #\(String(format: "%.0f", number))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            
+            if book.pageCount > 0 {
+                Text("• \(book.pageCount) pages")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            
+            readStatusView
+        }
+    }
+    
+    @ViewBuilder
+    private var readStatusView: some View {
+        if book.isCompleted {
+            Text("• Read")
+                .font(.caption)
+                .foregroundStyle(.green)
+        } else if book.currentPage > 0 {
+            Text("• Page \(book.currentPage)")
+                .font(.caption)
+                .foregroundStyle(.orange)
         }
     }
 }
