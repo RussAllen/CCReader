@@ -273,12 +273,14 @@ struct KomgaLibraryView: View {
     @AppStorage("komgaServerName") private var serverName = "Komga Server"
     
     var body: some View {
-        NavigationSplitView {
-            sidebarContent
-        } content: {
-            contentColumn
-        } detail: {
-            detailColumn
+        Group {
+            if viewMode == .recentBooks {
+                // Two-column layout for recent books
+                recentBooksNavigationView
+            } else {
+                // Three-column layout for series and reading lists
+                standardNavigationView
+            }
         }
         .overlay(alignment: .bottomTrailing) {
             // Show active downloads notification
@@ -345,6 +347,26 @@ struct KomgaLibraryView: View {
         }
     }
     
+    // Two-column layout for recent books
+    private var recentBooksNavigationView: some View {
+        NavigationSplitView {
+            sidebarContent
+        } detail: {
+            detailColumn
+        }
+    }
+    
+    // Three-column layout for series and reading lists
+    private var standardNavigationView: some View {
+        NavigationSplitView {
+            sidebarContent
+        } content: {
+            contentColumn
+        } detail: {
+            detailColumn
+        }
+    }
+    
     // MARK: - Sidebar
     
     private var sidebarContent: some View {
@@ -364,18 +386,6 @@ struct KomgaLibraryView: View {
             }
             
             if api.isConnected {
-                ToolbarItem(placement: .status) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "circle.fill")
-                            .font(.system(size: 8))
-                            .foregroundStyle(.green)
-                        
-                        Text(debugInfo.isEmpty ? "Connected" : debugInfo)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                
                 ToolbarItem(placement: .automatic) {
                     Button(action: { Task { await loadData() } }) {
                         Label("Refresh", systemImage: "arrow.clockwise")
@@ -778,25 +788,37 @@ struct KomgaLibraryView: View {
     
     private var notConnectedView: some View {
         VStack(spacing: 20) {
-            Image(systemName: "server.rack")
-                .font(.system(size: 60))
-                .foregroundStyle(.secondary)
-            
-            Text("Not Connected")
-                .font(.title2)
-            
-            if let error = api.errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+            if isLoading {
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .progressViewStyle(.circular)
+                    
+                    Text("Connecting to server...")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Image(systemName: "server.rack")
+                    .font(.system(size: 60))
+                    .foregroundStyle(.secondary)
+                
+                Text("Not Connected")
+                    .font(.title2)
+                
+                if let error = api.errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+                
+                Button("Connect to Server") {
+                    showingSettings = true
+                }
+                .buttonStyle(.borderedProminent)
             }
-            
-            Button("Connect to Server") {
-                showingSettings = true
-            }
-            .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

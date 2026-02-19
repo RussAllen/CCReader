@@ -4,7 +4,4 @@
    <FileRef
       location = "self:">
    </FileRef>
-   <FileRef
-      location = "group:Assets.xcassetsCCReadericon.appiconsetContents.json">
-   </FileRef>
 </Workspace>

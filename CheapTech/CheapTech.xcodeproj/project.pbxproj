@@ -6,33 +6,20 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		BA90E16E2F3CF0DB00FCCB38 /* KomgaDownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA90E16D2F3CF0DB00FCCB38 /* KomgaDownloadManager.swift */; };
-		BA90E1702F3CF17800FCCB38 /* DOWNLOAD_FEATURE_SUMMARY.md in Resources */ = {isa = PBXBuildFile; fileRef = BA90E16F2F3CF17800FCCB38 /* DOWNLOAD_FEATURE_SUMMARY.md */; };
-		BA90E1722F3CF28100FCCB38 /* READING_LISTS_FEATURE.md in Resources */ = {isa = PBXBuildFile; fileRef = BA90E1712F3CF28100FCCB38 /* READING_LISTS_FEATURE.md */; };
-		BA90E1742F3CF2A100FCCB38 /* READING_LISTS_GUIDE.md in Resources */ = {isa = PBXBuildFile; fileRef = BA90E1732F3CF2A100FCCB38 /* READING_LISTS_GUIDE.md */; };
-		BA90E1762F3CF44400FCCB38 /* READING_LISTS_FILTER_FEATURE.md in Resources */ = {isa = PBXBuildFile; fileRef = BA90E1752F3CF44400FCCB38 /* READING_LISTS_FILTER_FEATURE.md */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXFileReference section */
-		BA553BDB2F33C95B004A304D /* CCReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CCReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		BA90E16D2F3CF0DB00FCCB38 /* KomgaDownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KomgaDownloadManager.swift; sourceTree = "<group>"; };
-		BA90E16F2F3CF17800FCCB38 /* DOWNLOAD_FEATURE_SUMMARY.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = DOWNLOAD_FEATURE_SUMMARY.md; sourceTree = "<group>"; };
-		BA90E1712F3CF28100FCCB38 /* READING_LISTS_FEATURE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = READING_LISTS_FEATURE.md; sourceTree = "<group>"; };
-		BA90E1732F3CF2A100FCCB38 /* READING_LISTS_GUIDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = READING_LISTS_GUIDE.md; sourceTree = "<group>"; };
-		BA90E1752F3CF44400FCCB38 /* READING_LISTS_FILTER_FEATURE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = READING_LISTS_FILTER_FEATURE.md; sourceTree = "<group>"; };
+		BA26DAC22F3FCCAD003883D0 /* CheapTech.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CheapTech.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		BA553BDD2F33C95B004A304D /* CCReader */ = {
+		BA26DAC42F3FCCAD003883D0 /* CheapTech */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = CCReader;
+			path = CheapTech;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		BA553BD82F33C95B004A304D /* Frameworks */ = {
+		BA26DABF2F3FCCAD003883D0 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -42,23 +29,18 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		BA553BD22F33C95B004A304D = {
+		BA26DAB92F3FCCAD003883D0 = {
 			isa = PBXGroup;
 			children = (
-				BA553BDD2F33C95B004A304D /* CCReader */,
-				BA553BDC2F33C95B004A304D /* Products */,
-				BA90E16D2F3CF0DB00FCCB38 /* KomgaDownloadManager.swift */,
-				BA90E16F2F3CF17800FCCB38 /* DOWNLOAD_FEATURE_SUMMARY.md */,
-				BA90E1712F3CF28100FCCB38 /* READING_LISTS_FEATURE.md */,
-				BA90E1732F3CF2A100FCCB38 /* READING_LISTS_GUIDE.md */,
-				BA90E1752F3CF44400FCCB38 /* READING_LISTS_FILTER_FEATURE.md */,
+				BA26DAC42F3FCCAD003883D0 /* CheapTech */,
+				BA26DAC32F3FCCAD003883D0 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		BA553BDC2F33C95B004A304D /* Products */ = {
+		BA26DAC32F3FCCAD003883D0 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				BA553BDB2F33C95B004A304D /* CCReader.app */,
+				BA26DAC22F3FCCAD003883D0 /* CheapTech.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -66,89 +48,84 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		BA553BDA2F33C95B004A304D /* CCReader */ = {
+		BA26DAC12F3FCCAD003883D0 /* CheapTech */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = BA553BE82F33C95C004A304D /* Build configuration list for PBXNativeTarget "CCReader" */;
+			buildConfigurationList = BA26DACF2F3FCCBB003883D0 /* Build configuration list for PBXNativeTarget "CheapTech" */;
 			buildPhases = (
-				BA553BD72F33C95B004A304D /* Sources */,
-				BA553BD82F33C95B004A304D /* Frameworks */,
-				BA553BD92F33C95B004A304D /* Resources */,
+				BA26DABE2F3FCCAD003883D0 /* Sources */,
+				BA26DABF2F3FCCAD003883D0 /* Frameworks */,
+				BA26DAC02F3FCCAD003883D0 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				BA553BDD2F33C95B004A304D /* CCReader */,
+				BA26DAC42F3FCCAD003883D0 /* CheapTech */,
 			);
-			name = CCReader;
+			name = CheapTech;
 			packageProductDependencies = (
 			);
-			productName = CCReader;
-			productReference = BA553BDB2F33C95B004A304D /* CCReader.app */;
+			productName = CheapTech;
+			productReference = BA26DAC22F3FCCAD003883D0 /* CheapTech.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		BA553BD32F33C95B004A304D /* Project object */ = {
+		BA26DABA2F3FCCAD003883D0 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2620;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
-					BA553BDA2F33C95B004A304D = {
+					BA26DAC12F3FCCAD003883D0 = {
 						CreatedOnToolsVersion = 26.2;
 					};
 				};
 			};
-			buildConfigurationList = BA553BD62F33C95B004A304D /* Build configuration list for PBXProject "CCReader" */;
+			buildConfigurationList = BA26DABD2F3FCCAD003883D0 /* Build configuration list for PBXProject "CheapTech" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
 			);
-			mainGroup = BA553BD22F33C95B004A304D;
+			mainGroup = BA26DAB92F3FCCAD003883D0;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = BA553BDC2F33C95B004A304D /* Products */;
+			productRefGroup = BA26DAC32F3FCCAD003883D0 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				BA553BDA2F33C95B004A304D /* CCReader */,
+				BA26DAC12F3FCCAD003883D0 /* CheapTech */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		BA553BD92F33C95B004A304D /* Resources */ = {
+		BA26DAC02F3FCCAD003883D0 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BA90E1702F3CF17800FCCB38 /* DOWNLOAD_FEATURE_SUMMARY.md in Resources */,
-				BA90E1742F3CF2A100FCCB38 /* READING_LISTS_GUIDE.md in Resources */,
-				BA90E1722F3CF28100FCCB38 /* READING_LISTS_FEATURE.md in Resources */,
-				BA90E1762F3CF44400FCCB38 /* READING_LISTS_FILTER_FEATURE.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		BA553BD72F33C95B004A304D /* Sources */ = {
+		BA26DABE2F3FCCAD003883D0 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BA90E16E2F3CF0DB00FCCB38 /* KomgaDownloadManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		BA553BE62F33C95C004A304D /* Debug */ = {
+		BA26DACD2F3FCCBB003883D0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -211,7 +188,7 @@
 			};
 			name = Debug;
 		};
-		BA553BE72F33C95C004A304D /* Release */ = {
+		BA26DACE2F3FCCBB003883D0 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -266,100 +243,88 @@
 			};
 			name = Release;
 		};
-		BA553BE92F33C95C004A304D /* Debug */ = {
+		BA26DAD02F3FCCBB003883D0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = CCReadericon;
-				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=macosx*]" = CCReadericon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_APP_SANDBOX = NO;
+				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = CCReader;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.magazines-and-newspapers";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.russellallen.CCReader;
+				PRODUCT_BUNDLE_IDENTIFIER = com.russellallen.CheapTech;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 2;
 			};
 			name = Debug;
 		};
-		BA553BEA2F33C95C004A304D /* Release */ = {
+		BA26DAD12F3FCCBB003883D0 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = CCReadericon;
-				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=macosx*]" = CCReadericon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_APP_SANDBOX = NO;
+				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = CCReader;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.magazines-and-newspapers";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.russellallen.CCReader;
+				PRODUCT_BUNDLE_IDENTIFIER = com.russellallen.CheapTech;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
-				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 2;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		BA553BD62F33C95B004A304D /* Build configuration list for PBXProject "CCReader" */ = {
+		BA26DABD2F3FCCAD003883D0 /* Build configuration list for PBXProject "CheapTech" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				BA553BE62F33C95C004A304D /* Debug */,
-				BA553BE72F33C95C004A304D /* Release */,
+				BA26DACD2F3FCCBB003883D0 /* Debug */,
+				BA26DACE2F3FCCBB003883D0 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		BA553BE82F33C95C004A304D /* Build configuration list for PBXNativeTarget "CCReader" */ = {
+		BA26DACF2F3FCCBB003883D0 /* Build configuration list for PBXNativeTarget "CheapTech" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				BA553BE92F33C95C004A304D /* Debug */,
-				BA553BEA2F33C95C004A304D /* Release */,
+				BA26DAD02F3FCCBB003883D0 /* Debug */,
+				BA26DAD12F3FCCBB003883D0 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = BA553BD32F33C95B004A304D /* Project object */;
+	rootObject = BA26DABA2F3FCCAD003883D0 /* Project object */;
 }

@@ -1,19 +1,18 @@
 //
-//  CCReaderApp.swift
-//  CCReader
+//  CheapTechApp.swift
+//  CheapTech
 //
-//  Created by Russell Allen on 2/4/26.
+//  Created by Russell Allen on 2/13/26.
 //
 
 import SwiftUI
 import SwiftData
 
 @main
-struct CCReaderApp: App {
+struct CheapTechApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
-            ComicBook.self,
+            SavedSearch.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -27,9 +26,7 @@ struct CCReaderApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .tint(.orange) // Change this to any color you want: .blue, .green, .purple, etc.
         }
         .modelContainer(sharedModelContainer)
-        .defaultSize(width: 1024, height: 768)
     }
 }
